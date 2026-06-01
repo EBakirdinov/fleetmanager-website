@@ -1,0 +1,252 @@
+// ============================================================
+// Schedule-It-Up — Utility / Helper Classes
+// ============================================================
+
+// ---- Text color ----
+
+.text-primary { color: $fleet-primary !important; }
+.text-success  { color: $status-success !important; }
+.text-danger   { color: $status-danger !important; }
+.text-warning  { color: $status-warning !important; }
+.text-info     { color: $status-info !important; }
+.text-dark     { color: $text-dark !important; }
+.text-body-cl  { color: $text-body !important; }
+.text-sub      { color: $text-sub !important; }
+.text-muted    { color: $text-muted-fleet !important; }
+.text-white    { color: #fff !important; }
+
+// ---- Font size ----
+
+.text-xs   { font-size: 11px !important; }
+.text-sm   { font-size: 12.5px !important; }
+.text-base { font-size: 14px !important; }
+.text-md   { font-size: 15px !important; }
+.text-lg   { font-size: 16px !important; }
+.text-xl   { font-size: 18px !important; }
+.text-2xl  { font-size: 22px !important; }
+.text-3xl  { font-size: 28px !important; }
+
+// ---- Font weight ----
+
+.fw-400 { font-weight: 400 !important; }
+.fw-500 { font-weight: 500 !important; }
+.fw-600 { font-weight: 600 !important; }
+.fw-700 { font-weight: 700 !important; }
+.fw-800 { font-weight: 800 !important; }
+
+// ---- Text alignment ----
+
+.text-left   { text-align: left !important; }
+.text-center { text-align: center !important; }
+.text-right  { text-align: right !important; }
+
+// ---- Text transform ----
+
+.text-upper { text-transform: uppercase !important; }
+.text-lower { text-transform: lowercase !important; }
+.text-cap   { text-transform: capitalize !important; }
+
+// ---- Text overflow ----
+
+.truncate   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nowrap     { white-space: nowrap !important; }
+.break-all  { word-break: break-all !important; }
+.break-word { overflow-wrap: break-word !important; }
+
+// ---- Display ----
+
+.d-none         { display: none !important; }
+.d-block        { display: block !important; }
+.d-inline       { display: inline !important; }
+.d-inline-block { display: inline-block !important; }
+.d-flex         { display: flex !important; }
+.d-inline-flex  { display: inline-flex !important; }
+.d-grid         { display: grid !important; }
+
+// ---- Flex ----
+
+.flex-col     { flex-direction: column !important; }
+.flex-row     { flex-direction: row !important; }
+.flex-wrap    { flex-wrap: wrap !important; }
+.flex-nowrap  { flex-wrap: nowrap !important; }
+.flex-1       { flex: 1 !important; }
+.flex-shrink-0 { flex-shrink: 0 !important; }
+.flex-grow-0  { flex-grow: 0 !important; }
+
+.items-start   { align-items: flex-start !important; }
+.items-center  { align-items: center !important; }
+.items-end     { align-items: flex-end !important; }
+.items-stretch { align-items: stretch !important; }
+.items-base    { align-items: baseline !important; }
+
+.justify-start   { justify-content: flex-start !important; }
+.justify-center  { justify-content: center !important; }
+.justify-end     { justify-content: flex-end !important; }
+.justify-between { justify-content: space-between !important; }
+.justify-around  { justify-content: space-around !important; }
+.justify-evenly  { justify-content: space-evenly !important; }
+
+.self-start   { align-self: flex-start !important; }
+.self-center  { align-self: center !important; }
+.self-end     { align-self: flex-end !important; }
+.self-stretch { align-self: stretch !important; }
+
+// ---- Gap ----
+
+.gap-1 { gap: 4px !important; }
+.gap-2 { gap: 6px !important; }
+.gap-3 { gap: 8px !important; }
+.gap-4 { gap: 12px !important; }
+.gap-5 { gap: 16px !important; }
+.gap-6 { gap: 20px !important; }
+.gap-7 { gap: 24px !important; }
+.gap-8 { gap: 32px !important; }
+
+// ---- Spacing ----
+
+$siu-spaces: (
+    0: 0,
+    1: 4px,
+    2: 8px,
+    3: 12px,
+    4: 16px,
+    5: 20px,
+    6: 24px,
+    7: 28px,
+    8: 32px,
+    10: 40px,
+    12: 48px
+);
+
+@each $key, $val in $siu-spaces {
+    .mt-#{$key} { margin-top: $val !important; }
+    .mb-#{$key} { margin-bottom: $val !important; }
+    .ml-#{$key} { margin-left: $val !important; }
+    .mr-#{$key} { margin-right: $val !important; }
+    .mx-#{$key} { margin-left: $val !important; margin-right: $val !important; }
+    .my-#{$key} { margin-top: $val !important; margin-bottom: $val !important; }
+    .m-#{$key}  { margin: $val !important; }
+
+    .pt-#{$key} { padding-top: $val !important; }
+    .pb-#{$key} { padding-bottom: $val !important; }
+    .pl-#{$key} { padding-left: $val !important; }
+    .pr-#{$key} { padding-right: $val !important; }
+    .px-#{$key} { padding-left: $val !important; padding-right: $val !important; }
+    .py-#{$key} { padding-top: $val !important; padding-bottom: $val !important; }
+    .p-#{$key}  { padding: $val !important; }
+}
+
+.mx-auto { margin-left: auto !important; margin-right: auto !important; }
+.ml-auto { margin-left: auto !important; }
+.mr-auto { margin-right: auto !important; }
+.mt-auto { margin-top: auto !important; }
+.mb-auto { margin-bottom: auto !important; }
+
+// ---- Width / Height ----
+
+.w-full  { width: 100% !important; }
+.w-auto  { width: auto !important; }
+.w-half  { width: 50% !important; }
+.h-full  { height: 100% !important; }
+.h-auto  { height: auto !important; }
+.min-w-0 { min-width: 0 !important; }
+
+// ---- Position ----
+
+.pos-relative { position: relative !important; }
+.pos-absolute { position: absolute !important; }
+.pos-fixed    { position: fixed !important; }
+.pos-sticky   { position: sticky !important; }
+
+// ---- Overflow ----
+
+.overflow-hidden { overflow: hidden !important; }
+.overflow-auto   { overflow: auto !important; }
+.overflow-x-auto { overflow-x: auto !important; }
+.overflow-y-auto { overflow-y: auto !important; }
+
+// ---- Border radius ----
+
+.rounded      { border-radius: $radius !important; }
+.rounded-sm   { border-radius: $radius-sm !important; }
+.rounded-lg   { border-radius: $radius-lg !important; }
+.rounded-full { border-radius: 9999px !important; }
+.rounded-0    { border-radius: 0 !important; }
+
+// ---- Borders ----
+
+.border     { border: 1px solid $card-border !important; }
+.border-t   { border-top: 1px solid $card-border !important; }
+.border-b   { border-bottom: 1px solid $card-border !important; }
+.border-l   { border-left: 1px solid $card-border !important; }
+.border-r   { border-right: 1px solid $card-border !important; }
+.border-0   { border: none !important; }
+
+// ---- Backgrounds ----
+
+.bg-white    { background: #fff !important; }
+.bg-body     { background: $body-bg !important; }
+.bg-card     { background: $card-bg !important; }
+.bg-primary  { background: $fleet-primary !important; }
+.bg-primary-light { background: $fleet-primary-light !important; }
+.bg-success  { background: #dcfce7 !important; }
+.bg-danger   { background: #fee2e2 !important; }
+.bg-warning  { background: #fef3c7 !important; }
+.bg-info     { background: #dbeafe !important; }
+
+// ---- Shadow ----
+
+.shadow      { box-shadow: $card-shadow !important; }
+.shadow-none { box-shadow: none !important; }
+.shadow-md   { box-shadow: 0 4px 12px rgba(0,0,0,.1) !important; }
+.shadow-lg   { box-shadow: 0 8px 24px rgba(0,0,0,.12) !important; }
+
+// ---- Cursor ----
+
+.cursor-pointer     { cursor: pointer !important; }
+.cursor-default     { cursor: default !important; }
+.cursor-not-allowed { cursor: not-allowed !important; }
+
+// ---- Opacity ----
+
+.opacity-0   { opacity: 0 !important; }
+.opacity-50  { opacity: .5 !important; }
+.opacity-75  { opacity: .75 !important; }
+.opacity-100 { opacity: 1 !important; }
+
+// ---- Visibility ----
+
+.visible   { visibility: visible !important; }
+.invisible { visibility: hidden !important; }
+
+// ---- Pointer events ----
+
+.pointer-none   { pointer-events: none !important; }
+.pointer-auto   { pointer-events: auto !important; }
+
+// ---- User select ----
+
+.select-none { user-select: none !important; }
+
+// ---- List reset ----
+
+.list-none { list-style: none !important; padding: 0 !important; margin: 0 !important; }
+
+// ---- Z-index ----
+
+.z-0   { z-index: 0 !important; }
+.z-10  { z-index: 10 !important; }
+.z-50  { z-index: 50 !important; }
+.z-100 { z-index: 100 !important; }
+
+// ---- Divider ----
+
+.fleet-divider {
+    height: 1px;
+    background: $card-border;
+    margin: 16px 0;
+
+    &.divider-sm  { margin: 8px 0; }
+    &.divider-lg  { margin: 24px 0; }
+    &.divider-v   { width: 1px; height: auto; align-self: stretch; margin: 0 8px; }
+}

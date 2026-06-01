@@ -1,0 +1,36 @@
+// ============================================================
+// Fleet Manager — Main Entry Point
+// ============================================================
+
+// Google Fonts loaded in template head; define fallback stack here
+$inter-stack: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+@import 'fleet/variables';
+@import 'fleet/sidebar';
+@import 'fleet/layout';
+@import 'fleet/components';
+@import 'fleet/forms';
+@import 'fleet/modals';
+@import 'fleet/dropdowns';
+@import 'fleet/utilities';
+@import 'fleet/dashboard';
+
+body {
+    margin: 0 !important; padding: 0 !important;
+}
+
+// ---- Global reset for fleet pages ----
+
+.fleet-wrapper *,
+.fleet-login-wrap * {
+    box-sizing: border-box;
+}
+
+.fleet-wrapper,
+.fleet-login-wrap {
+    font-family: $inter-stack;
+    font-size: 14px;
+    color: $text-body;
+    line-height: 1.5;
+}
+@import 'fleet/dark';

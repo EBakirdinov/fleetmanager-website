@@ -1,0 +1,155 @@
+{% extends 'Fleet/base.html.twig' %}
+
+{% block title %}Dashboard — FleetManager{% endblock %}
+
+{% block breadcrumb %}
+    <span class="bc-sep">›</span>
+    <span class="bc-current">Dashboard</span>
+{% endblock %}
+
+{% block content %}
+    <div class="page-head">
+        <h1 class="page-heading">
+            Dashboard
+            <span class="live-pill">Live</span>
+        </h1>
+        <p class="page-sub">Overview of your fleet operations — updated in real-time.</p>
+    </div>
+
+    {# Stats #}
+    {# <div class="fleet-stats-row" style="grid-template-columns: repeat(5, 1fr);">
+        <div class="fleet-stat">
+            <div class="fleet-stat-icon" style="background:#dbeafe;">
+                <svg viewBox="0 0 24 24" fill="#2563eb"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>
+            </div>
+            <div class="fleet-stat-label">Total Trucks</div>
+            <div class="fleet-stat-value">48</div>
+            <div class="fleet-stat-hint">12 on the move</div>
+        </div>
+        <div class="fleet-stat">
+            <div class="fleet-stat-icon" style="background:#dcfce7;">
+                <svg viewBox="0 0 24 24" fill="#16a34a"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg>
+            </div>
+            <div class="fleet-stat-label">On The Move</div>
+            <div class="fleet-stat-value">32</div>
+            <div class="fleet-stat-hint" style="color:#16a34a;">66.7%</div>
+        </div>
+        <div class="fleet-stat">
+            <div class="fleet-stat-icon" style="background:#fee2e2;">
+                <svg viewBox="0 0 24 24" fill="#dc2626"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            </div>
+            <div class="fleet-stat-label">Stopped</div>
+            <div class="fleet-stat-value">10</div>
+            <div class="fleet-stat-hint">20.8%</div>
+        </div>
+        <div class="fleet-stat">
+            <div class="fleet-stat-icon" style="background:#fef3c7;">
+                <svg viewBox="0 0 24 24" fill="#d97706"><path d="M13 2.05V4.05C17.39 4.59 20.5 8.58 19.96 12.97C19.5 16.61 16.64 19.5 13 19.93V21.93C18.5 21.38 22.5 16.5 21.95 11C21.5 6.25 17.73 2.5 13 2.05z"/></svg>
+            </div>
+            <div class="fleet-stat-label">Idle</div>
+            <div class="fleet-stat-value">4</div>
+            <div class="fleet-stat-hint">8.3%</div>
+        </div>
+        <div class="fleet-stat">
+            <div class="fleet-stat-icon" style="background:#f1f5f9;">
+                <svg viewBox="0 0 24 24" fill="#64748b"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6z"/></svg>
+            </div>
+            <div class="fleet-stat-label">Offline</div>
+            <div class="fleet-stat-value">2</div>
+            <div class="fleet-stat-hint">4.2%</div>
+        </div>
+    </div> #}
+
+    {# Main grid #}
+    {# <div style="display:grid;grid-template-columns:1fr 300px;gap:18px;">
+        <div class="fleet-card">
+            <div class="fleet-card-header">
+                <h3 class="fleet-card-title">Active Loads</h3>
+                <a href="{{ path('fleet_loads') }}" class="view-all-link">View All →</a>
+            </div>
+            <div class="fleet-table-wrap">
+                <table class="fleet-table">
+                    <thead><tr>
+                        <th>Load #</th><th>Truck</th><th>Driver</th><th>Pickup</th><th>Delivery</th><th>Status</th><th>Progress</th>
+                    </tr></thead>
+                    <tbody>
+                        <tr>
+                            <td><a class="fleet-link" href="#">LD76452</a></td>
+                            <td><a class="fleet-link" href="#">T-102</a></td>
+                            <td>Michael Brown</td><td>Chicago, IL</td><td>Atlanta, GA</td>
+                            <td><span class="fleet-badge badge-info">In Transit</span></td>
+                            <td><div class="fleet-progress"><div class="progress-track"><div class="progress-fill" style="width:65%"></div></div><span class="progress-pct">65%</span></div></td>
+                        </tr>
+                        <tr>
+                            <td><a class="fleet-link" href="#">LD76451</a></td>
+                            <td><a class="fleet-link" href="#">T-103</a></td>
+                            <td>David Wilson</td><td>Minneapolis, MN</td><td>Dallas, TX</td>
+                            <td><span class="fleet-badge badge-info">In Transit</span></td>
+                            <td><div class="fleet-progress"><div class="progress-track"><div class="progress-fill" style="width:38%"></div></div><span class="progress-pct">38%</span></div></td>
+                        </tr>
+                        <tr>
+                            <td><a class="fleet-link" href="#">LD76450</a></td>
+                            <td><a class="fleet-link" href="#">T-105</a></td>
+                            <td>Daniel Martinez</td><td>Denver, CO</td><td>New York, NY</td>
+                            <td><span class="fleet-badge badge-info">In Transit</span></td>
+                            <td><div class="fleet-progress"><div class="progress-track"><div class="progress-fill" style="width:22%"></div></div><span class="progress-pct">22%</span></div></td>
+                        </tr>
+                        <tr>
+                            <td><a class="fleet-link" href="#">LD76449</a></td>
+                            <td><a class="fleet-link" href="#">T-107</a></td>
+                            <td>Robert Taylor</td><td>Miami, FL</td><td>Philadelphia, PA</td>
+                            <td><span class="fleet-badge badge-info">In Transit</span></td>
+                            <td><div class="fleet-progress"><div class="progress-track"><div class="progress-fill" style="width:47%"></div></div><span class="progress-pct">47%</span></div></td>
+                        </tr>
+                        <tr>
+                            <td><a class="fleet-link" href="#">LD76448</a></td>
+                            <td><a class="fleet-link" href="#">T-104</a></td>
+                            <td>Chris Davis</td><td>Houston, TX</td><td>Los Angeles, CA</td>
+                            <td><span class="fleet-badge badge-success">Delivered</span></td>
+                            <td><div class="fleet-progress"><div class="progress-track"><div class="progress-fill fill-success" style="width:100%"></div></div><span class="progress-pct">100%</span></div></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="fleet-card">
+                <div class="fleet-card-header">
+                    <h3 class="fleet-card-title">Recent Alerts</h3>
+                    <a href="{{ path('fleet_notifications') }}" class="view-all-link">View All</a>
+                </div>
+                <div style="padding:4px 0;">
+                    {% set alerts = [
+                        {color:'#fee2e2',fill:'#dc2626',title:'T-108 — Geofence Exit',sub:'Baton Rouge, LA · 10m ago'},
+                        {color:'#fef3c7',fill:'#d97706',title:'T-106 — Engine Idle',sub:'Memphis, TN · 25m ago'},
+                        {color:'#fef3c7',fill:'#d97706',title:'T-104 — Low Fuel',sub:'Houston, TX · 1h ago'},
+                    ] %}
+                    {% for a in alerts %}
+                    <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 16px;">
+                        <div style="width:30px;height:30px;background:{{ a.color }};border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="{{ a.fill }}"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                        </div>
+                        <div>
+                            <div class="alert-item-title">{{ a.title }}</div>
+                            <div class="alert-item-sub">{{ a.sub }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="fleet-card">
+                <div class="fleet-card-header">
+                    <h3 class="fleet-card-title">Quick Actions</h3>
+                </div>
+                <div style="padding:10px 14px;display:flex;flex-direction:column;gap:6px;">
+                    <a href="{{ path('fleet_loads') }}"       class="fleet-btn btn-outline-fleet" style="justify-content:flex-start;"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> Add Load</a>
+                    <a href="{{ path('fleet_trucks') }}"       class="fleet-btn btn-outline-fleet" style="justify-content:flex-start;"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> Add Truck</a>
+                    <a href="{{ path('fleet_trailers') }}"     class="fleet-btn btn-outline-fleet" style="justify-content:flex-start;"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> Add Trailer</a>
+                    <a href="{{ path('fleet_drivers') }}"      class="fleet-btn btn-outline-fleet" style="justify-content:flex-start;"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> Add Driver</a>
+                </div>
+            </div>
+        </div>
+    </div> #}
+{% endblock %}

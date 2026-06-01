@@ -1,0 +1,764 @@
+// ============================================================
+// Fleet Manager — UI Components
+// ============================================================
+
+// ---- Cards ----
+
+.fleet-card {
+    background: $card-bg;
+    border-radius: $radius;
+    box-shadow: $card-shadow;
+    border: 1px solid $card-border;
+    overflow: hidden;
+}
+
+.fleet-card-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid $card-border;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.fleet-card-title {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: $text-dark;
+    margin: 0;
+}
+
+.fleet-card-body { padding: 18px; }
+
+// ---- Stats Row ----
+
+.fleet-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.fleet-stat {
+    background: $card-bg;
+    border: 1px solid $card-border;
+    border-radius: $radius;
+    padding: 14px 16px;
+    box-shadow: $card-shadow;
+}
+
+.fleet-stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+
+    svg { width: 18px; height: 18px; }
+}
+
+.fleet-stat-label { font-size: 11.5px; color: $text-sub; font-weight: 500; margin-bottom: 3px; }
+.fleet-stat-value { font-size: 24px; font-weight: 700; color: $text-dark; line-height: 1; margin-bottom: 3px; }
+.fleet-stat-hint  { font-size: 11px; color: $text-muted-fleet; }
+
+// ---- Buttons ----
+
+.fleet-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: $radius-sm;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    text-decoration: none !important;
+    transition: all $transition;
+    line-height: 1;
+    white-space: nowrap;
+    font-family: inherit;
+    outline: none;
+
+    svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    // ---- Sizes ----
+
+    &.btn-xs {
+        padding: 4px 9px;
+        font-size: 11.5px;
+        svg { width: 12px; height: 12px; }
+    }
+
+    &.btn-sm {
+        padding: 5px 11px;
+        font-size: 12px;
+        svg { width: 13px; height: 13px; }
+    }
+
+    &.btn-lg {
+        padding: 10px 20px;
+        font-size: 14.5px;
+        border-radius: $radius;
+        svg { width: 16px; height: 16px; }
+    }
+
+    &.btn-xl {
+        padding: 13px 24px;
+        font-size: 15px;
+        border-radius: $radius;
+        svg { width: 18px; height: 18px; }
+    }
+
+    &.btn-block { width: 100%; }
+    &.btn-square { padding: 7px; }
+
+    // ---- Variants ----
+
+    &.btn-primary-fleet {
+        background: $fleet-primary;
+        color: #fff;
+        border-color: $fleet-primary;
+        &:hover  { background: $fleet-primary-dark; border-color: $fleet-primary-dark; color: #fff; }
+        &:active { background: darken($fleet-primary-dark, 4%); }
+    }
+
+    &.btn-outline-fleet {
+        background: transparent;
+        color: $text-dark;
+        border-color: $card-border;
+        &:hover  { background: $body-bg; border-color: darken($card-border, 8%); }
+        &:active { background: darken($body-bg, 2%); }
+    }
+
+    &.btn-ghost-fleet {
+        background: transparent;
+        color: $text-sub;
+        border-color: transparent;
+        &:hover  { background: $body-bg; color: $text-dark; }
+        &:active { background: darken($body-bg, 2%); }
+    }
+
+    &.btn-success-fleet {
+        background: $status-success;
+        color: #fff;
+        border-color: $status-success;
+        &:hover  { background: darken($status-success, 6%); border-color: darken($status-success, 6%); color: #fff; }
+    }
+
+    &.btn-success-outline {
+        background: transparent;
+        color: $status-success;
+        border-color: $status-success;
+        &:hover  { background: #dcfce7; }
+    }
+
+    &.btn-danger-fleet {
+        background: $status-danger;
+        color: #fff;
+        border-color: $status-danger;
+        &:hover  { background: darken($status-danger, 6%); border-color: darken($status-danger, 6%); color: #fff; }
+    }
+
+    &.btn-danger-outline {
+        background: transparent;
+        color: $status-danger;
+        border-color: $status-danger;
+        &:hover  { background: #fee2e2; }
+    }
+
+    &.btn-warning-fleet {
+        background: $status-warning;
+        color: #fff;
+        border-color: $status-warning;
+        &:hover  { background: darken($status-warning, 8%); border-color: darken($status-warning, 8%); color: #fff; }
+    }
+
+    &.btn-warning-outline {
+        background: transparent;
+        color: $status-warning;
+        border-color: $status-warning;
+        &:hover  { background: #fef3c7; }
+    }
+
+    &.btn-info-fleet {
+        background: $status-info;
+        color: #fff;
+        border-color: $status-info;
+        &:hover  { background: darken($status-info, 8%); border-color: darken($status-info, 8%); color: #fff; }
+    }
+
+    &.btn-dark-fleet {
+        background: $text-dark;
+        color: #fff;
+        border-color: $text-dark;
+        &:hover  { background: #1e293b; border-color: #1e293b; color: #fff; }
+    }
+
+    // ---- Disabled ----
+
+    &:disabled,
+    &.disabled {
+        opacity: .45;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+
+    // ---- Loading ----
+
+    &.loading {
+        pointer-events: none;
+        opacity: .75;
+
+        &::before {
+            content: '';
+            width: 13px;
+            height: 13px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: fleet-spin .7s linear infinite;
+            flex-shrink: 0;
+        }
+    }
+}
+
+// ---- Button Group ----
+
+.fleet-btn-group {
+    display: inline-flex;
+
+    .fleet-btn {
+        border-radius: 0;
+
+        &:first-child { border-radius: $radius-sm 0 0 $radius-sm; }
+        &:last-child  { border-radius: 0 $radius-sm $radius-sm 0; }
+
+        &:not(:first-child) { margin-left: -1px; }
+        &:hover, &:focus { z-index: 1; position: relative; }
+    }
+}
+
+@keyframes fleet-spin {
+    to { transform: rotate(360deg); }
+}
+
+// ---- Badges ----
+
+.fleet-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+
+    &::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    &.badge-success { background: #dcfce7; color: #15803d; }
+    &.badge-warning { background: #fef3c7; color: #b45309; }
+    &.badge-danger  { background: #fee2e2; color: #b91c1c; }
+    &.badge-info    { background: #dbeafe; color: #1d4ed8; }
+    &.badge-gray    { background: #f1f5f9; color: #475569; }
+    &.badge-orange  { background: #ffedd5; color: #c2410c; }
+}
+
+// ---- Tables ----
+
+.fleet-table-wrap { overflow-x: auto; }
+
+.fleet-table {
+    width: 100%;
+    border-collapse: collapse;
+
+    thead th {
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: $text-sub;
+        padding: 9px 14px;
+        text-align: left;
+        border-bottom: 1px solid $card-border;
+        background: #f8fafc;
+        white-space: nowrap;
+    }
+
+    tbody td {
+        padding: 11px 14px;
+        font-size: 13.5px;
+        color: $text-dark;
+        border-bottom: 1px solid $card-border;
+        vertical-align: middle;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #f8fafc; }
+}
+
+// ---- Empty State ----
+
+.fleet-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 56px 20px;
+    text-align: center;
+}
+
+.fleet-empty-icon {
+    width: 60px;
+    height: 60px;
+    background: $body-bg;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+
+    svg { width: 28px; height: 28px; color: $text-muted-fleet; }
+}
+
+.fleet-empty-title { font-size: 15px; font-weight: 600; color: $text-dark; margin-bottom: 6px; }
+.fleet-empty-text  { font-size: 13.5px; color: $text-sub; margin-bottom: 18px; max-width: 300px; }
+
+// ---- Progress Bar ----
+
+.fleet-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .progress-track {
+        flex: 1;
+        height: 6px;
+        background: #e2e8f0;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: $fleet-primary;
+        border-radius: 3px;
+        transition: width .3s;
+
+        &.fill-success { background: $status-success; }
+        &.fill-warning { background: $status-warning; }
+        &.fill-danger  { background: $status-danger; }
+    }
+
+    .progress-pct {
+        font-size: 11.5px;
+        color: $text-sub;
+        white-space: nowrap;
+        min-width: 30px;
+    }
+}
+
+// ---- Link helpers ----
+
+.fleet-link {
+    color: $fleet-primary;
+    text-decoration: none;
+    font-weight: 500;
+    &:hover { text-decoration: underline; color: $fleet-primary-dark; }
+}
+
+.view-all-link {
+    font-size: 12.5px;
+    color: $fleet-primary;
+    text-decoration: none;
+    white-space: nowrap;
+    &:hover { text-decoration: underline; }
+}
+
+// ---- Loading Spinner ----
+
+.fleet-spinner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    &::after {
+        content: '';
+        width: 20px;
+        height: 20px;
+        border: 2.5px solid $card-border;
+        border-top-color: $fleet-primary;
+        border-radius: 50%;
+        animation: fleet-spin .7s linear infinite;
+    }
+
+    &.spinner-sm::after { width: 14px; height: 14px; border-width: 2px; }
+    &.spinner-lg::after { width: 32px; height: 32px; border-width: 3px; }
+
+    &.spinner-white::after { border-color: rgba(255,255,255,.3); border-top-color: #fff; }
+}
+
+@keyframes fleet-spin { to { transform: rotate(360deg); } }
+
+// ---- Skeleton Loader ----
+
+@keyframes fleet-shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+}
+
+.fleet-skeleton {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 800px 100%;
+    animation: fleet-shimmer 1.5s infinite linear;
+    border-radius: $radius-sm;
+
+    &.sk-text  { height: 14px; }
+    &.sk-title { height: 20px; }
+    &.sk-h1    { height: 28px; }
+    &.sk-btn   { height: 32px; width: 100px; }
+    &.sk-circle { border-radius: 50%; }
+    &.sk-w-full { width: 100%; }
+    &.sk-w-3\/4 { width: 75%; }
+    &.sk-w-1\/2 { width: 50%; }
+    &.sk-w-1\/3 { width: 33%; }
+}
+
+// ---- Tabs ----
+
+.fleet-tabs {
+    display: flex;
+    flex-direction: column;
+}
+
+.fleet-tabs-list {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid $card-border;
+    overflow-x: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+}
+
+.fleet-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: $text-sub;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    white-space: nowrap;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    transition: color $transition;
+    text-decoration: none;
+    font-family: inherit;
+    flex-shrink: 0;
+
+    svg { width: 15px; height: 15px; }
+
+    .tab-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        background: $body-bg;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        color: $text-sub;
+        padding: 0 4px;
+    }
+
+    &:hover { color: $text-dark; }
+
+    &.active {
+        color: $fleet-primary;
+        border-bottom-color: $fleet-primary;
+
+        .tab-count {
+            background: $fleet-primary-light;
+            color: $fleet-primary;
+        }
+    }
+
+    &:disabled {
+        opacity: .4;
+        cursor: not-allowed;
+    }
+}
+
+.fleet-tabs-content { padding-top: 1px; }
+
+.fleet-tab-pane {
+    display: none;
+    &.active { display: block; }
+}
+
+// ---- Pill Tabs ----
+
+.fleet-tabs-pills {
+    .fleet-tabs-list {
+        border-bottom: none;
+        gap: 4px;
+        background: $body-bg;
+        padding: 4px;
+        border-radius: $radius;
+        width: fit-content;
+    }
+
+    .fleet-tab {
+        border-bottom: none;
+        margin-bottom: 0;
+        border-radius: 6px;
+        padding: 7px 14px;
+        font-size: 12.5px;
+
+        &.active {
+            background: $card-bg;
+            color: $text-dark;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            border-bottom-color: transparent;
+        }
+    }
+}
+
+// ---- Chip / Tag ----
+
+.fleet-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 500;
+    background: $body-bg;
+    color: $text-dark;
+    border: 1px solid $card-border;
+
+    svg { width: 13px; height: 13px; }
+
+    .chip-remove {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: $text-sub;
+        padding: 0;
+        display: flex;
+        transition: color $transition;
+        margin-left: 2px;
+
+        svg { width: 12px; height: 12px; }
+        &:hover { color: $status-danger; }
+    }
+
+    &.chip-primary { background: $fleet-primary-light; color: $fleet-primary; border-color: #bfdbfe; }
+    &.chip-success { background: #dcfce7; color: $status-success; border-color: #bbf7d0; }
+    &.chip-danger  { background: #fee2e2; color: $status-danger; border-color: #fecaca; }
+    &.chip-warning { background: #fef3c7; color: $status-warning; border-color: #fde68a; }
+}
+
+.fleet-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+// ---- Tooltip ----
+
+.fleet-tooltip {
+    position: relative;
+    display: inline-block;
+
+    .tooltip-content {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: $text-dark;
+        color: #fff;
+        font-size: 11.5px;
+        font-weight: 500;
+        padding: 5px 10px;
+        border-radius: 6px;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .15s, visibility .15s;
+        z-index: 800;
+
+        &::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 4px solid transparent;
+            border-top-color: $text-dark;
+        }
+    }
+
+    &:hover .tooltip-content {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    &.tooltip-right .tooltip-content {
+        bottom: auto;
+        left: calc(100% + 6px);
+        top: 50%;
+        transform: translateY(-50%);
+
+        &::after {
+            top: 50%;
+            left: -8px;
+            right: auto;
+            transform: translateY(-50%);
+            border-top-color: transparent;
+            border-right-color: $text-dark;
+        }
+    }
+}
+
+// ---- Avatar ----
+
+.fleet-avatar-group {
+    display: flex;
+
+    .fleet-avatar {
+        border: 2px solid $card-bg;
+        margin-left: -8px;
+
+        &:first-child { margin-left: 0; }
+    }
+
+    &.hover-spread {
+        .fleet-avatar { transition: margin $transition; }
+        &:hover .fleet-avatar { margin-left: 2px; }
+    }
+}
+
+// ---- Stat Tile (horizontal) ----
+
+.fleet-kv {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+
+    .kv-label { font-size: 11.5px; color: $text-sub; font-weight: 500; }
+    .kv-value { font-size: 14px; font-weight: 600; color: $text-dark; }
+    .kv-hint  { font-size: 11px; color: $text-muted-fleet; }
+}
+
+// ---- Inline alert ----
+
+.fleet-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 14px;
+    border-radius: $radius-sm;
+    font-size: 13px;
+    border: 1px solid transparent;
+    margin-bottom: 0;
+
+    svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+
+    .alert-body { flex: 1; min-width: 0; }
+    .alert-title { font-weight: 600; margin-bottom: 2px; }
+    .alert-text  { line-height: 1.5; }
+
+    .alert-close {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        opacity: .7;
+        flex-shrink: 0;
+        &:hover { opacity: 1; }
+        svg { width: 14px; height: 14px; margin: 0; }
+    }
+
+    &.alert-info    { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+    &.alert-success { background: #dcfce7; color: #15803d; border-color: #86efac; }
+    &.alert-warning { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    &.alert-danger  { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+    &.alert-neutral { background: $body-bg; color: $text-dark; border-color: $card-border; }
+}
+
+// ---- Section title (reusable) ----
+
+.fleet-section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: $text-dark;
+    margin: 0;
+}
+
+.fleet-section-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+// ---- List / Item rows ----
+
+.fleet-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.fleet-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid $card-border;
+    font-size: 13.5px;
+    color: $text-dark;
+    transition: background $transition;
+
+    &:last-child { border-bottom: none; }
+    &:hover      { background: #f8fafc; }
+
+    .item-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+
+        svg { width: 17px; height: 17px; }
+    }
+
+    .item-body  { flex: 1; min-width: 0; }
+    .item-title { font-weight: 600; color: $text-dark; }
+    .item-sub   { font-size: 12px; color: $text-sub; margin-top: 1px; }
+    .item-meta  { font-size: 12px; color: $text-muted-fleet; white-space: nowrap; }
+    .item-side  { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+}
