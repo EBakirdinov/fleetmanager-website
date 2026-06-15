@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In — FleetManager</title>
+    <title>Sign Up — FleetManager</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,12 +32,12 @@
         </a>
 
         <h1 class="login-headline">
-            Manage your fleet<br>
-            <span>smarter &amp; faster</span>
+            Start managing<br>
+            <span>your fleet today</span>
         </h1>
 
         <p class="login-tagline">
-            Complete fleet management and dispatch platform.
+            Create your free account and get a 14-day trial.
             Track trucks in real-time, manage loads, drivers,
             and DOT compliance — all in one place.
         </p>
@@ -60,24 +60,34 @@
         </button>
 
         <div class="lform-header">
-            <h2 class="lform-title">Welcome back</h2>
-            <p class="lform-sub">Sign in to your FleetManager account</p>
+            <h2 class="lform-title">Create your account</h2>
+            <p class="lform-sub">Get started with FleetManager — free for 14 days</p>
         </div>
 
         {# Error from session #}
-        {% if app.session.get('fleet_login_error') %}
+        {% if app.session.get('fleet_register_error') %}
             <div class="lform-alert alert-danger" data-auto-dismiss>
-                {{ app.session.get('fleet_login_error') }}
-                {% do app.session.remove('fleet_login_error') %}
+                {{ app.session.get('fleet_register_error') }}
+                {% do app.session.remove('fleet_register_error') %}
             </div>
         {% endif %}
 
-        {# Flash errors (if using Symfony Security form_login later) #}
-        {% for msg in app.flashes('fleet_error') %}
-            <div class="lform-alert alert-danger" data-auto-dismiss>{{ msg }}</div>
-        {% endfor %}
+        <form method="post" action="{{ path('fleet_register') }}" id="fleetRegisterForm" novalidate>
 
-        <form method="post" action="{{ path('fleet_login') }}" id="fleetLoginForm" novalidate>
+            <div class="lform-group">
+                <label class="lform-label" for="fleet_company">Company name</label>
+                <input
+                    type="text"
+                    id="fleet_company"
+                    name="companyName"
+                    class="lform-control"
+                    value="{{ app.session.get('fleet_last_company') ?? '' }}"
+                    placeholder="Acme Logistics"
+                    autocomplete="organization"
+                    autofocus
+                    required
+                >
+            </div>
 
             <div class="lform-group">
                 <label class="lform-label" for="fleet_email">Email address</label>
@@ -87,18 +97,14 @@
                     name="email"
                     class="lform-control"
                     value="{{ app.session.get('fleet_last_email') ?? '' }}"
-                    placeholder="admin@fleetmanager.com"
+                    placeholder="you@company.com"
                     autocomplete="email"
-                    autofocus
                     required
                 >
             </div>
 
             <div class="lform-group">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-                    <label class="lform-label" for="fleet_password" style="margin-bottom:0;">Password</label>
-                    <a href="#" class="lform-forgot">Forgot password?</a>
-                </div>
+                <label class="lform-label" for="fleet_password">Password</label>
                 <div class="pw-wrapper">
                     <input
                         type="password"
@@ -106,7 +112,8 @@
                         name="password"
                         class="lform-control"
                         placeholder="••••••••"
-                        autocomplete="current-password"
+                        autocomplete="new-password"
+                        minlength="6"
                         required
                         style="padding-right: 40px;"
                     >
@@ -123,15 +130,35 @@
                 </div>
             </div>
 
-            <div class="lform-row-space">
-                <label class="lform-remember">
-                    <input type="checkbox" name="remember_me">
-                    Remember me for 7 days
-                </label>
+            <div class="lform-group">
+                <label class="lform-label" for="fleet_password_confirm">Confirm password</label>
+                <div class="pw-wrapper">
+                    <input
+                        type="password"
+                        id="fleet_password_confirm"
+                        name="password_confirm"
+                        class="lform-control"
+                        placeholder="••••••••"
+                        autocomplete="new-password"
+                        minlength="6"
+                        required
+                        style="padding-right: 40px;"
+                    >
+                    <button type="button" class="pw-toggle" tabindex="-1">
+                        <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <button type="submit" class="lform-submit">
-                Sign In
+                Create Account
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <line x1="5" y1="12" x2="19" y2="12"/>
                     <polyline points="12 5 19 12 12 19"/>
@@ -141,8 +168,8 @@
         </form>
 
         <p class="lform-switch" style="text-align:center;margin-top:18px;font-size:14px;">
-            Don't have an account?
-            <a href="{{ path('fleet_register') }}" class="lform-forgot">Sign up</a>
+            Already have an account?
+            <a href="{{ path('fleet_login') }}" class="lform-forgot">Sign in</a>
         </p>
 
         <div class="lform-footer">
@@ -164,6 +191,22 @@
             this.querySelector('.eye-off').style.display = isPw ? '' : 'none';
         });
     });
+
+    // Client-side password match check
+    var form = document.getElementById('fleetRegisterForm');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            var pw = document.getElementById('fleet_password').value;
+            var cf = document.getElementById('fleet_password_confirm').value;
+            if (pw !== cf) {
+                e.preventDefault();
+                document.getElementById('fleet_password_confirm').setCustomValidity('Passwords do not match');
+                document.getElementById('fleet_password_confirm').reportValidity();
+            } else {
+                document.getElementById('fleet_password_confirm').setCustomValidity('');
+            }
+        });
+    }
 
     // Auto-dismiss alerts
     document.querySelectorAll('[data-auto-dismiss]').forEach(function (el) {

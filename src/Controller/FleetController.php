@@ -78,6 +78,66 @@ class FleetController extends BaseFleetController
     }
 
     /**
+     * @Route("/register", name="fleet_register", methods={"GET", "POST"})
+     */
+    public function register(Request $request, SessionInterface $session): Response
+    {
+        if ($this->isAuthenticated($session)) {
+            return $this->redirectToRoute('fleet_dashboard');
+        }
+
+        if ($request->isMethod('POST')) {
+            $companyName     = trim($request->request->get('companyName', ''));
+            $email           = trim($request->request->get('email', ''));
+            $password        = (string) $request->request->get('password', '');
+            $passwordConfirm = (string) $request->request->get('password_confirm', '');
+
+            if ($companyName === '' || $email === '' || $password === '') {
+                $session->set('fleet_register_error', 'Company name, email and password are required.');
+                $session->set('fleet_last_email', $email);
+                $session->set('fleet_last_company', $companyName);
+                return $this->redirectToRoute('fleet_register');
+            }
+
+            if ($password !== $passwordConfirm) {
+                $session->set('fleet_register_error', 'Passwords do not match.');
+                $session->set('fleet_last_email', $email);
+                $session->set('fleet_last_company', $companyName);
+                return $this->redirectToRoute('fleet_register');
+            }
+
+            $registerResponse = $this->accountService->register([
+                'companyName' => $companyName,
+                'email'       => $email,
+                'password'    => $password,
+            ]);
+
+            if (is_array($registerResponse) && !empty($registerResponse['token'])) {
+                $token = $registerResponse['token'];
+                $session->set('stoken', $token);
+
+                $userData = $this->accountService->getCurrentUser();
+                $session->set('user_email', $userData['username'] ?? $email);
+                $session->set('first_name', $userData['firstName'] ?? '');
+                $session->set('last_name', $userData['lastName'] ?? '');
+
+                return $this->redirectToRoute('fleet_dashboard');
+            }
+
+            $error = (is_array($registerResponse) && isset($registerResponse['message']))
+                ? $registerResponse['message']
+                : 'Could not create account. Please try again.';
+
+            $session->set('fleet_register_error', $error);
+            $session->set('fleet_last_email', $email);
+
+            return $this->redirectToRoute('fleet_register');
+        }
+
+        return $this->render('Fleet/register.html.twig');
+    }
+
+    /**
      * @Route("/logout", name="fleet_logout")
      */
     public function logout(SessionInterface $session): Response
