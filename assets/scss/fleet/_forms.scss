@@ -1,5 +1,5 @@
 // ============================================================
-// Schedule-It-Up — Form Components
+// Fleet Manager — Form Components
 // ============================================================
 
 // ---- Base control mixin ----
@@ -222,10 +222,10 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: $card-bg;
-    border: 1.5px solid $card-border;
-    border-radius: $radius-sm;
-    padding: 7px 12px;
+    background: $body-bg;
+    border: 1px solid $card-border;
+    border-radius: 8px;
+    padding: 6px 12px;
     transition: border-color $transition, box-shadow $transition;
 
     &:focus-within {
@@ -233,14 +233,11 @@
         box-shadow: 0 0 0 3px rgba($fleet-primary, .1);
     }
 
-    .search-icon {
+    svg {
         width: 15px;
         height: 15px;
         color: $text-muted-fleet;
         flex-shrink: 0;
-        display: flex;
-
-        svg { width: 15px; height: 15px; }
     }
 
     input {
@@ -454,6 +451,17 @@
     margin-bottom: 14px;
 }
 
+// ---- Form Footer (action row with border) ----
+
+.form-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid $card-border;
+}
+
 // ---- Filter bar (search + controls) ----
 
 .fleet-filter-bar {
@@ -470,4 +478,25 @@
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
+}
+
+// ---- Password toggle ----
+
+.pw-wrapper { position: relative; }
+
+.pw-toggle {
+    position: absolute;
+    right: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: $text-muted-fleet;
+    padding: 0;
+    display: flex;
+    transition: color $transition;
+
+    &:hover { color: $text-sub; }
+    svg { width: 17px; height: 17px; }
 }

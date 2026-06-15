@@ -1,0 +1,31 @@
+{% extends 'Fleet/base.html.twig' %}
+{% block title %}Add Truck — FleetManager{% endblock %}
+{% block breadcrumb %}
+    <span class="bc-sep">›</span>
+    <a href="{{ path('fleet_trucks') }}">Trucks</a>
+    <span class="bc-sep">›</span>
+    <span class="bc-current">Add Truck</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1 class="page-heading">Add Truck</h1>
+    <p class="page-sub">Fill in the details to add a new truck to your fleet.</p>
+</div>
+
+<div class="fleet-card" style="max-width:780px;">
+    <div class="fleet-card-header">
+        <h3 class="fleet-card-title">Truck Information</h3>
+    </div>
+    <div class="fleet-card-body" style="padding:24px;">
+        <form method="POST" action="{{ path('fleet_truck_new') }}">
+            {% include 'Fleet/trucks/_form.html.twig' with {formData: formData, error: error} %}
+
+            <div class="form-footer">
+                <button type="submit" class="fleet-btn btn-primary-fleet">Create Truck</button>
+                <a href="{{ path('fleet_trucks') }}" class="fleet-btn btn-outline-fleet">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

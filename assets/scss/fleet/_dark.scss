@@ -57,6 +57,12 @@
     .fleet-card-title  { color: #f1f5f9; }
     .fleet-card-body   { color: #cbd5e1; }
 
+    .fleet-card--danger {
+        border-color: rgba(248,113,113,.3);
+        .fleet-card-header { border-bottom-color: rgba(248,113,113,.3); }
+        .fleet-card-title  { color: #f87171; }
+    }
+
     // ── Stat Tiles ────────────────────────────────────────────
     .fleet-stat {
         background: #1e293b;
@@ -78,6 +84,12 @@
         box-shadow: 1px 0 0 #1e293b;
     }
 
+    // ── Context button ────────────────────────────────────────
+    .fleet-ctx-btn {
+        color: #475569;
+        &:hover { background: #0f172a; color: #e2e8f0; }
+    }
+
     // ── Tables ────────────────────────────────────────────────
     .fleet-table {
         thead th {
@@ -91,6 +103,45 @@
         }
         tbody tr:hover td { background: #253347; }
     }
+
+    // ── Status Pills ──────────────────────────────────────────
+    .status-pill {
+        &.s-booked     { background: rgba(29,78,216,.2);  color: #93c5fd; border-color: rgba(29,78,216,.3); }
+        &.s-dispatched { background: rgba(194,65,12,.2);  color: #fdba74; border-color: rgba(194,65,12,.3); }
+        &.s-intransit  { background: rgba(15,118,110,.2); color: #5eead4; border-color: rgba(15,118,110,.3); }
+        &.s-delivered  { background: rgba(21,128,61,.2);  color: #86efac; border-color: rgba(21,128,61,.3); }
+        &.s-cancelled  { background: rgba(185,28,28,.2);  color: #fca5a5; border-color: rgba(185,28,28,.3); }
+    }
+
+    // ── Pagination ────────────────────────────────────────────
+    .table-pagination { border-top-color: #334155; }
+    .pagination-info  { color: #64748b; }
+
+    .pag-btn {
+        background: #1e293b;
+        border-color: #334155;
+        color: #64748b;
+        &:hover { border-color: #3b82f6; color: #60a5fa; }
+        &.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+    }
+
+    .perpage-select {
+        color: #64748b;
+        select { background: #0f172a; border-color: #334155; color: #e2e8f0; }
+    }
+
+    // ── Search box ────────────────────────────────────────────
+    .fleet-search {
+        background: #0f172a;
+        border-color: #334155;
+        &:focus-within { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+        svg { color: #475569; }
+        input { color: #e2e8f0; &::placeholder { color: #475569; } }
+        .search-clear { color: #475569; &:hover { color: #e2e8f0; } }
+    }
+
+    // ── Password toggle ───────────────────────────────────────
+    .pw-toggle { color: #475569; &:hover { color: #94a3b8; } }
 
     // ── Dropdowns ─────────────────────────────────────────────
     .fleet-dropdown-menu {
@@ -118,6 +169,10 @@
         &.btn-ghost-fleet {
             color: #64748b;
             &:hover { background: #0f172a; color: #e2e8f0; }
+        }
+        &.btn-ghost-danger {
+            color: #f87171;
+            &:hover { background: rgba(220,38,38,.12); color: #fca5a5; }
         }
         &.btn-dark-fleet {
             background: #334155;
@@ -171,9 +226,11 @@
     }
 
     // ── Forms ─────────────────────────────────────────────────
+    .form-footer { border-top-color: #334155; }
+
     .fleet-label { color: #e2e8f0; .label-hint { color: #64748b; } }
 
-    .fleet-input,
+    .fleet-control,
     .fleet-textarea,
     .fleet-select {
         background: #0f172a;
@@ -186,7 +243,7 @@
     }
 
     .fleet-input-group {
-        .input-addon { background: #1e293b; border-color: #334155; color: #64748b; }
+        .fleet-input-addon { background: #1e293b; border-color: #334155; color: #64748b; }
     }
 
     .fleet-hint     { color: #475569; }

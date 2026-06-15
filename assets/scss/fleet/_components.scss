@@ -31,6 +31,12 @@
 
 .fleet-card-body { padding: 18px; }
 
+.fleet-card--danger {
+    border-color: #fecaca;
+    .fleet-card-header { border-bottom-color: #fecaca; }
+    .fleet-card-title  { color: $status-danger; }
+}
+
 // ---- Stats Row ----
 
 .fleet-stats-row {
@@ -38,6 +44,9 @@
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 14px;
     margin-bottom: 20px;
+
+    &.cols-4 { grid-template-columns: repeat(4, 1fr); }
+    &.cols-3 { grid-template-columns: repeat(3, 1fr); }
 }
 
 .fleet-stat {
@@ -141,6 +150,14 @@
         border-color: transparent;
         &:hover  { background: $body-bg; color: $text-dark; }
         &:active { background: darken($body-bg, 2%); }
+    }
+
+    &.btn-ghost-danger {
+        background: transparent;
+        color: $status-danger;
+        border-color: transparent;
+        &:hover  { background: #fee2e2; color: darken($status-danger, 4%); }
+        &:active { background: #fecaca; }
     }
 
     &.btn-success-fleet {

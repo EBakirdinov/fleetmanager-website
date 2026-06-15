@@ -1,0 +1,88 @@
+{# Shared driver form fields. Expects: formData (array), mode ('new'|'edit') #}
+
+{% if error %}
+<div class="fleet-alert alert-danger" style="margin-bottom:20px;">{{ error }}</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+
+    <div class="fleet-form-group">
+        <label class="fleet-label" for="firstName">First Name</label>
+        <input class="fleet-control"
+               type="text"
+               id="firstName"
+               name="firstName"
+               value="{{ formData.firstName ?? '' }}"
+               placeholder="e.g. John"
+               required>
+    </div>
+
+    <div class="fleet-form-group">
+        <label class="fleet-label" for="lastName">Last Name</label>
+        <input class="fleet-control"
+               type="text"
+               id="lastName"
+               name="lastName"
+               value="{{ formData.lastName ?? '' }}"
+               placeholder="e.g. Smith"
+               required>
+    </div>
+
+    <div class="fleet-form-group">
+        <label class="fleet-label" for="status">Status</label>
+        <select class="fleet-select" id="status" name="status" required>
+            <option value="active"    {{ (formData.status ?? 'active') == 'active'    ? 'selected' : '' }}>Active</option>
+            <option value="off_duty"  {{ (formData.status ?? '') == 'off_duty'        ? 'selected' : '' }}>Off Duty</option>
+            <option value="suspended" {{ (formData.status ?? '') == 'suspended'       ? 'selected' : '' }}>Suspended</option>
+        </select>
+    </div>
+
+    <div class="fleet-form-group">
+        <label class="fleet-label" for="phone">Phone</label>
+        <input class="fleet-control"
+               type="tel"
+               id="phone"
+               name="phone"
+               value="{{ formData.phone ?? '' }}"
+               placeholder="e.g. +1 555 000 0000">
+    </div>
+
+    <div class="fleet-form-group">
+        <label class="fleet-label" for="email">Email</label>
+        <input class="fleet-control"
+               type="email"
+               id="email"
+               name="email"
+               value="{{ formData.email ?? '' }}"
+               placeholder="driver@example.com">
+    </div>
+
+    <div class="fleet-form-group">
+        <label class="fleet-label" for="dateOfBirth">Date of Birth</label>
+        <input class="fleet-control"
+               type="date"
+               id="dateOfBirth"
+               name="dateOfBirth"
+               value="{{ formData.dateOfBirth ?? '' }}">
+    </div>
+
+    <div class="fleet-form-group">
+        <label class="fleet-label" for="licenseNumber">License Number</label>
+        <input class="fleet-control"
+               type="text"
+               id="licenseNumber"
+               name="licenseNumber"
+               value="{{ formData.licenseNumber ?? '' }}"
+               placeholder="e.g. D1234567">
+    </div>
+
+    <div class="fleet-form-group">
+        <label class="fleet-label" for="licenseExpiration">License Expiration</label>
+        <input class="fleet-control"
+               type="date"
+               id="licenseExpiration"
+               name="licenseExpiration"
+               value="{{ formData.licenseExpiration ?? '' }}">
+    </div>
+
+</div>

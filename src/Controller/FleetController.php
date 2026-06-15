@@ -3,25 +3,19 @@
 namespace App\Controller;
 
 use App\Service\AccountService;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Symfony\Component\Routing\Annotation\Route;
 
-class FleetController extends AbstractController
+class FleetController extends BaseFleetController
 {
     private $accountService;
 
     public function __construct(AccountService $accountService)
     {
         $this->accountService = $accountService;
-    }
-
-    private function isAuthenticated(SessionInterface $session): bool
-    {
-        return (bool) $session->get('stoken');
     }
 
     // ----------------------------------------------------------------
@@ -112,26 +106,8 @@ class FleetController extends AbstractController
     }
 
     // ----------------------------------------------------------------
-    // Trucks
+    // Trucks — see App\Controller\TruckController
     // ----------------------------------------------------------------
-
-    /**
-     * @Route("/trucks", name="fleet_trucks")
-     */
-    public function trucks(SessionInterface $session): Response
-    {
-        if (!$this->isAuthenticated($session)) { return $this->redirectToRoute('fleet_login'); }
-        return $this->render('Fleet/trucks/index.html.twig');
-    }
-
-    /**
-     * @Route("/trucks/live-map", name="fleet_trucks_map")
-     */
-    public function trucksLiveMap(SessionInterface $session): Response
-    {
-        if (!$this->isAuthenticated($session)) { return $this->redirectToRoute('fleet_login'); }
-        return $this->render('Fleet/trucks/live_map.html.twig');
-    }
 
     // ----------------------------------------------------------------
     // Trailers
@@ -144,19 +120,6 @@ class FleetController extends AbstractController
     {
         if (!$this->isAuthenticated($session)) { return $this->redirectToRoute('fleet_login'); }
         return $this->render('Fleet/trailers/index.html.twig');
-    }
-
-    // ----------------------------------------------------------------
-    // Drivers
-    // ----------------------------------------------------------------
-
-    /**
-     * @Route("/drivers", name="fleet_drivers")
-     */
-    public function drivers(SessionInterface $session): Response
-    {
-        if (!$this->isAuthenticated($session)) { return $this->redirectToRoute('fleet_login'); }
-        return $this->render('Fleet/drivers/index.html.twig');
     }
 
     // ----------------------------------------------------------------

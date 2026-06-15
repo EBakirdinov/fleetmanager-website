@@ -1,0 +1,133 @@
+{% extends 'Fleet/base.html.twig' %}
+{% block title %}Edit Driver — FleetManager{% endblock %}
+{% block breadcrumb %}
+    <span class="bc-sep">›</span>
+    <a href="{{ path('fleet_drivers') }}">Drivers</a>
+    <span class="bc-sep">›</span>
+    <span class="bc-current">Edit Driver</span>
+{% endblock %}
+
+{% block content %}
+{% set fullName = ((driver.first_name ?? '') ~ ' ' ~ (driver.last_name ?? ''))|trim %}
+
+<div class="page-head d-flex items-center justify-between flex-wrap gap-4">
+    <div>
+        <h1 class="page-heading">{{ fullName ?: 'Edit Driver' }}</h1>
+        <p class="page-sub">Update driver profile and license information.</p>
+    </div>
+    <div class="d-flex gap-3 items-center">
+        {% if driver.status == 'active' %}
+            <span class="fleet-badge badge-success">Active</span>
+        {% elseif driver.status == 'off_duty' %}
+            <span class="fleet-badge badge-warning">Off Duty</span>
+        {% elseif driver.status == 'suspended' %}
+            <span class="fleet-badge badge-danger">Suspended</span>
+        {% endif %}
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 280px;gap:18px;align-items:start;">
+
+    <div class="fleet-card">
+        <div class="fleet-card-header">
+            <h3 class="fleet-card-title">Driver Information</h3>
+        </div>
+        <div class="fleet-card-body" style="padding:24px;">
+            <form method="POST" action="{{ path('fleet_driver_edit', {id: driver.id}) }}">
+                {% include 'Fleet/drivers/_form.html.twig' with {formData: formData, error: error} %}
+
+                <div class="form-footer">
+                    <button type="submit" class="fleet-btn btn-primary-fleet">Save Changes</button>
+                    <a href="{{ path('fleet_drivers') }}" class="fleet-btn btn-outline-fleet">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# Side panel #}
+    <div class="d-flex flex-col gap-4">
+
+        {# Assigned truck #}
+        <div class="fleet-card">
+            <div class="fleet-card-header">
+                <h3 class="fleet-card-title">Assigned Truck</h3>
+            </div>
+            <div class="fleet-card-body" style="padding:16px;">
+                {% if driver.assigned_truck is defined and driver.assigned_truck %}
+                    <div class="fleet-kv">
+                        <div class="kv-label">Truck Number</div>
+                        <div class="kv-value fw-600">
+                            {{ driver.assigned_truck.truck_number ?? ('#' ~ driver.assigned_truck.id) }}
+                        </div>
+                        {% if driver.assigned_truck.make or driver.assigned_truck.model %}
+                        <div class="kv-hint">
+                            {{ driver.assigned_truck.make ?? '' }} {{ driver.assigned_truck.model ?? '' }}
+                        </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <p class="m-0 text-muted" style="font-size:13px;">No truck assigned.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Danger zone #}
+        <div class="fleet-card fleet-card--danger">
+            <div class="fleet-card-header">
+                <h3 class="fleet-card-title">Danger Zone</h3>
+            </div>
+            <div class="fleet-card-body" style="padding:16px;">
+                <p class="mb-3 text-sub" style="margin-top:0;font-size:13px;">Permanently delete this driver profile. This action cannot be undone.</p>
+                <button type="button" class="fleet-btn btn-danger-fleet btn-block js-delete-driver"
+                        data-id="{{ driver.id }}"
+                        data-name="{{ fullName }}">
+                    Delete Driver
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{# Delete confirmation modal #}
+<div class="fleet-modal-backdrop" id="deleteModal">
+    <div class="fleet-modal modal-sm">
+        <div class="fleet-modal-header">
+            <h3 class="fleet-modal-title">Delete Driver</h3>
+            <button class="fleet-modal-close" id="deleteModalClose" type="button">&times;</button>
+        </div>
+        <div class="fleet-modal-body">
+            <p class="m-0">Are you sure you want to delete <strong id="deleteDriverName"></strong>? This cannot be undone.</p>
+        </div>
+        <div class="fleet-modal-footer">
+            <button class="fleet-btn btn-outline-fleet" id="deleteModalCancel" type="button">Cancel</button>
+            <form method="POST" action="{{ path('fleet_driver_delete', {id: driver.id}) }}" style="margin:0;">
+                <button type="submit" class="fleet-btn btn-danger-fleet">Delete</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+(function () {
+    var modal     = document.getElementById('deleteModal');
+    var nameEl    = document.getElementById('deleteDriverName');
+    var btnClose  = document.getElementById('deleteModalClose');
+    var btnCancel = document.getElementById('deleteModalCancel');
+
+    document.querySelectorAll('.js-delete-driver').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            nameEl.textContent = btn.getAttribute('data-name') || 'this driver';
+            modal.classList.add('show');
+        });
+    });
+
+    function closeModal() { modal.classList.remove('show'); }
+    btnClose.addEventListener('click', closeModal);
+    btnCancel.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+}());
+</script>
+{% endblock %}

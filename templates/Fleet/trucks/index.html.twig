@@ -1,19 +1,176 @@
 {% extends 'Fleet/base.html.twig' %}
 {% block title %}Trucks — FleetManager{% endblock %}
 {% block breadcrumb %}<span class="bc-sep">›</span><span class="bc-current">Trucks</span>{% endblock %}
+
 {% block content %}
-<div class="page-head">
-    <h1 class="page-heading">All Trucks</h1>
-    <p class="page-sub">Manage and monitor all trucks in your fleet.</p>
+<div class="page-head d-flex items-center justify-between flex-wrap gap-4">
+    <div>
+        <h1 class="page-heading">Trucks</h1>
+        <p class="page-sub">Manage all trucks in your fleet.</p>
+    </div>
+    <a href="{{ path('fleet_truck_new') }}" class="fleet-btn btn-primary-fleet">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        Add Truck
+    </a>
 </div>
+
+{# Stats — clickable filters by inspection state #}
+{% set total         = trucks|length %}
+{% set inspectionOk  = trucks|filter(t => t.last_inspection_date is not empty and date(t.last_inspection_date) >= date('-1 year'))|length %}
+{% set inspectionDue = trucks|filter(t => t.last_inspection_date is empty or date(t.last_inspection_date) < date('-1 year'))|length %}
+
+<div class="fleet-stats-row cols-3" style="margin-bottom:18px;">
+    <a href="{{ path('fleet_trucks') }}" class="fleet-stat" style="text-decoration:none;cursor:pointer;">
+        <div class="fleet-stat-label">Total Trucks</div>
+        <div class="fleet-stat-value">{{ total }}</div>
+    </a>
+    <a href="{{ path('fleet_trucks', {inspection:'ok'}) }}" class="fleet-stat" style="text-decoration:none;cursor:pointer;">
+        <div class="fleet-stat-label">Up to Date</div>
+        <div class="fleet-stat-value text-success">{{ inspectionOk }}</div>
+    </a>
+    <a href="{{ path('fleet_trucks', {inspection:'due'}) }}" class="fleet-stat" style="text-decoration:none;cursor:pointer;">
+        <div class="fleet-stat-label">Inspection Due</div>
+        <div class="fleet-stat-value text-warning">{{ inspectionDue }}</div>
+    </a>
+</div>
+
+{# Active filter chip #}
+{% if inspectionFilter %}
+<div class="d-flex items-center gap-3" style="margin-bottom:14px;">
+    <span class="text-sm text-sub">Filtered by inspection:</span>
+    <span class="fleet-badge {{ inspectionFilter == 'ok' ? 'badge-success' : 'badge-warning' }}">
+        {{ inspectionFilter == 'ok' ? 'Up to Date' : 'Inspection Due' }}
+    </span>
+    <a href="{{ path('fleet_trucks') }}" class="text-sm text-sub" style="text-decoration:none;">✕ Clear</a>
+</div>
+{% endif %}
+
 <div class="fleet-card">
-    <div class="fleet-empty">
-        <div class="fleet-empty-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+    {% if trucks|length == 0 %}
+        <div class="fleet-empty">
+            <div class="fleet-empty-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+            </div>
+            <div class="fleet-empty-title">No trucks found</div>
+            <div class="fleet-empty-text">
+                {% if inspectionFilter %}No trucks match that inspection filter.{% else %}Add your first truck to get started.{% endif %}
+            </div>
+            {% if inspectionFilter %}
+                <a href="{{ path('fleet_trucks') }}" class="fleet-btn btn-outline-fleet">Clear filter</a>
+            {% else %}
+                <a href="{{ path('fleet_truck_new') }}" class="fleet-btn btn-primary-fleet">Add Truck</a>
+            {% endif %}
         </div>
-        <div class="fleet-empty-title">All Trucks</div>
-        <div class="fleet-empty-text">Manage and monitor all trucks in your fleet.</div>
-        <button class="fleet-btn btn-primary-fleet">Get Started</button>
+    {% else %}
+        <div class="fleet-table-wrap">
+            <table class="fleet-table">
+                <thead>
+                    <tr>
+                        <th>Truck #</th>
+                        <th>Make / Model</th>
+                        <th>Year</th>
+                        <th>Plate #</th>
+                        <th>Last Inspection</th>
+                        <th>Status</th>
+                        <th style="width:90px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for truck in trucks %}
+                    <tr>
+                        <td>
+                            <a href="{{ path('fleet_truck_edit', {id: truck.id}) }}" class="fleet-link fw-600">
+                                {{ truck.truck_number ?? ('#' ~ truck.id) }}
+                            </a>
+                        </td>
+                        <td>
+                            {% if truck.make or truck.model %}
+                                {{ truck.make ?? '' }} {{ truck.model ?? '' }}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>{{ truck.year ?? '—' }}</td>
+                        <td>{{ truck.plate_number ?? '—' }}</td>
+                        <td>
+                            {% if truck.last_inspection_date %}
+                                {{ truck.last_inspection_date|date('M d, Y') }}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>
+                            {% if truck.status == 1 %}
+                                <span class="fleet-badge badge-success">Active</span>
+                            {% else %}
+                                <span class="fleet-badge badge-gray">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1 items-center">
+                                <a href="{{ path('fleet_truck_edit', {id: truck.id}) }}"
+                                   class="fleet-btn btn-ghost-fleet btn-xs" title="Edit">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                    </svg>
+                                </a>
+                                <button class="fleet-btn btn-ghost-danger btn-xs js-delete-truck"
+                                        data-id="{{ truck.id }}"
+                                        data-name="{{ truck.truck_number ?? ('#' ~ truck.id) }}"
+                                        title="Delete">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>
+
+{# Delete confirmation modal #}
+<div class="fleet-modal-backdrop" id="deleteModal">
+    <div class="fleet-modal modal-sm">
+        <div class="fleet-modal-header">
+            <h3 class="fleet-modal-title">Delete Truck</h3>
+            <button class="fleet-modal-close" id="deleteModalClose" type="button">&times;</button>
+        </div>
+        <div class="fleet-modal-body">
+            <p class="m-0">Are you sure you want to delete <strong id="deleteTruckName"></strong>? This cannot be undone.</p>
+        </div>
+        <div class="fleet-modal-footer">
+            <button class="fleet-btn btn-outline-fleet" id="deleteModalCancel" type="button">Cancel</button>
+            <form id="deleteForm" method="POST" style="margin:0;">
+                <button type="submit" class="fleet-btn btn-danger-fleet">Delete</button>
+            </form>
+        </div>
     </div>
 </div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+(function () {
+    var modal     = document.getElementById('deleteModal');
+    var nameEl    = document.getElementById('deleteTruckName');
+    var form      = document.getElementById('deleteForm');
+    var btnClose  = document.getElementById('deleteModalClose');
+    var btnCancel = document.getElementById('deleteModalCancel');
+
+    document.querySelectorAll('.js-delete-truck').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id   = btn.getAttribute('data-id');
+            var name = btn.getAttribute('data-name') || 'this truck';
+            nameEl.textContent = name;
+            form.setAttribute('action', '/trucks/' + id + '/delete');
+            modal.classList.add('show');
+        });
+    });
+
+    function closeModal() { modal.classList.remove('show'); }
+    btnClose.addEventListener('click', closeModal);
+    btnCancel.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+}());
+</script>
 {% endblock %}
