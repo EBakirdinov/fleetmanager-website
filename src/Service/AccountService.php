@@ -63,7 +63,7 @@ class AccountService extends ApiClient
         }
 
         foreach ($user['roles'] as $userRole) {
-            if ($userRole == SecurityService::ROLE_ADMIN) {
+            if ($userRole == SecurityService::ROLE_OWNER) {
                 return true;
             }
         }

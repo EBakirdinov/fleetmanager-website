@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\Session\SessionInterface;
 
 class SecurityService
 {
+    const ROLE_OWNER = 'ROLE_OWNER';
     const ROLE_MANAGER = 'ROLE_MANAGER';
     const ROLE_DISPATCHER = 'ROLE_DISPATCHER';
     const ROLE_USER = 'ROLE_USER';
@@ -32,6 +33,23 @@ class SecurityService
     const ACTION_MANAGE_SUBSCRIPTION = 'subscription';
 
     private static $permissions = [
+        // Owner has every manager capability plus owner-only actions
+        // (billing/subscription, and future ones such as API keys).
+        self::ROLE_OWNER => [
+            self::ACTION_VIEW_JOBS,
+            self::ACTION_CREATE_JOB,
+            self::ACTION_UPDATE_JOB,
+            self::ACTION_DELETE_JOB,
+            self::ACTION_MANAGE_SETTINGS,
+            self::ACTION_MANAGE_TEAM,
+            self::ACTION_MANAGE_PROFILE,
+            self::ACTION_MANAGE_FINANCE,
+            self::ACTION_MANAGE_SUBSCRIPTION,
+            self::ACTION_VIEW_CUSTOMERS,
+            self::ACTION_CREATE_CUSTOMER,
+            self::ACTION_UPDATE_CUSTOMER,
+            self::ACTION_DELETE_CUSTOMER,
+        ],
         self::ROLE_MANAGER => [
             self::ACTION_VIEW_JOBS,
             self::ACTION_CREATE_JOB,
