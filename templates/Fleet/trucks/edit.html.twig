@@ -91,7 +91,7 @@
                 <h3 class="fleet-card-title">Inspection</h3>
             </div>
             <div class="fleet-card-body" style="padding:16px;">
-                {% if truck.last_inspection_date %}
+                {% if truck.last_inspection_date ?? false %}
                     <div class="fleet-kv">
                         <div class="kv-label">Last Inspection</div>
                         <div class="kv-value fw-600">{{ truck.last_inspection_date|date('M d, Y') }}</div>

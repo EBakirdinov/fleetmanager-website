@@ -1,0 +1,130 @@
+{% extends 'Fleet/base.html.twig' %}
+{% block title %}Edit Load — FleetManager{% endblock %}
+{% block breadcrumb %}
+    <span class="bc-sep">›</span>
+    <a href="{{ path('fleet_loads') }}">Loads</a>
+    <span class="bc-sep">›</span>
+    <span class="bc-current">Edit Load</span>
+{% endblock %}
+
+{% block content %}
+{% set loadLabel = load.reference_number ?? ('#' ~ load.id) %}
+
+<div class="page-head d-flex items-center justify-between flex-wrap gap-4">
+    <div>
+        <h1 class="page-heading">{{ loadLabel }}</h1>
+        <p class="page-sub">Update load details, route, and driver assignment.</p>
+    </div>
+    <div class="d-flex gap-3 items-center">
+        {% if load.status == 'pending' %}
+            <span class="fleet-badge badge-warning">Pending</span>
+        {% elseif load.status == 'assigned' %}
+            <span class="fleet-badge badge-info">Assigned</span>
+        {% elseif load.status == 'in_transit' %}
+            <span class="fleet-badge badge-orange">In Transit</span>
+        {% elseif load.status == 'delivered' %}
+            <span class="fleet-badge badge-success">Delivered</span>
+        {% elseif load.status == 'cancelled' %}
+            <span class="fleet-badge badge-danger">Cancelled</span>
+        {% endif %}
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 280px;gap:18px;align-items:start;">
+
+    <div class="fleet-card">
+        <div class="fleet-card-header">
+            <h3 class="fleet-card-title">Load Information</h3>
+        </div>
+        <div class="fleet-card-body" style="padding:24px;">
+            <form method="POST" action="{{ path('fleet_load_edit', {id: load.id}) }}">
+                {% include 'Fleet/loads/_form.html.twig' with {formData: formData, error: error, drivers: drivers} %}
+
+                <div class="form-footer">
+                    <button type="submit" class="fleet-btn btn-primary-fleet">Save Changes</button>
+                    <a href="{{ path('fleet_loads') }}" class="fleet-btn btn-outline-fleet">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# Side panel #}
+    <div class="d-flex flex-col gap-4">
+
+        {# Driver #}
+        <div class="fleet-card">
+            <div class="fleet-card-header">
+                <h3 class="fleet-card-title">Driver</h3>
+            </div>
+            <div class="fleet-card-body" style="padding:16px;">
+                {% if load.driver ?? false %}
+                    <div class="fleet-kv">
+                        <div class="kv-label">Assigned to</div>
+                        <div class="kv-value fw-600">{{ ((load.driver.first_name ?? '') ~ ' ' ~ (load.driver.last_name ?? ''))|trim ?: ('#' ~ (load.driver.id ?? '')) }}</div>
+                    </div>
+                {% else %}
+                    <p class="m-0 text-muted" style="font-size:13px;">No driver assigned.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Danger zone #}
+        <div class="fleet-card fleet-card--danger">
+            <div class="fleet-card-header">
+                <h3 class="fleet-card-title">Danger Zone</h3>
+            </div>
+            <div class="fleet-card-body" style="padding:16px;">
+                <p class="mb-3 text-sub" style="margin-top:0;font-size:13px;">Permanently delete this load. This action cannot be undone.</p>
+                <button type="button" class="fleet-btn btn-danger-fleet btn-block js-delete-load"
+                        data-id="{{ load.id }}"
+                        data-name="{{ loadLabel }}">
+                    Delete Load
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{# Delete confirmation modal #}
+<div class="fleet-modal-backdrop" id="deleteModal">
+    <div class="fleet-modal modal-sm">
+        <div class="fleet-modal-header">
+            <h3 class="fleet-modal-title">Delete Load</h3>
+            <button class="fleet-modal-close" id="deleteModalClose" type="button">&times;</button>
+        </div>
+        <div class="fleet-modal-body">
+            <p class="m-0">Are you sure you want to delete <strong id="deleteLoadName"></strong>? This cannot be undone.</p>
+        </div>
+        <div class="fleet-modal-footer">
+            <button class="fleet-btn btn-outline-fleet" id="deleteModalCancel" type="button">Cancel</button>
+            <form method="POST" action="{{ path('fleet_load_delete', {id: load.id}) }}" style="margin:0;">
+                <button type="submit" class="fleet-btn btn-danger-fleet">Delete</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+(function () {
+    var modal     = document.getElementById('deleteModal');
+    var nameEl    = document.getElementById('deleteLoadName');
+    var btnClose  = document.getElementById('deleteModalClose');
+    var btnCancel = document.getElementById('deleteModalCancel');
+
+    document.querySelectorAll('.js-delete-load').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            nameEl.textContent = btn.getAttribute('data-name') || 'this load';
+            modal.classList.add('show');
+        });
+    });
+
+    function closeModal() { modal.classList.remove('show'); }
+    btnClose.addEventListener('click', closeModal);
+    btnCancel.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+}());
+</script>
+{% endblock %}

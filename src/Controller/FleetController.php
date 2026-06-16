@@ -183,17 +183,8 @@ class FleetController extends BaseFleetController
     }
 
     // ----------------------------------------------------------------
-    // Loads
+    // Loads — see App\Controller\LoadController
     // ----------------------------------------------------------------
-
-    /**
-     * @Route("/loads", name="fleet_loads")
-     */
-    public function loads(SessionInterface $session): Response
-    {
-        if (!$this->isAuthenticated($session)) { return $this->redirectToRoute('fleet_login'); }
-        return $this->render('Fleet/loads/index.html.twig');
-    }
 
     // ----------------------------------------------------------------
     // Dispatch

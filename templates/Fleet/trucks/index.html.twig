@@ -16,8 +16,8 @@
 
 {# Stats — clickable filters by inspection state #}
 {% set total         = trucks|length %}
-{% set inspectionOk  = trucks|filter(t => t.last_inspection_date is not empty and date(t.last_inspection_date) >= date('-1 year'))|length %}
-{% set inspectionDue = trucks|filter(t => t.last_inspection_date is empty or date(t.last_inspection_date) < date('-1 year'))|length %}
+{% set inspectionOk  = trucks|filter(t => (t.last_inspection_date ?? '') is not empty and date(t.last_inspection_date) >= date('-1 year'))|length %}
+{% set inspectionDue = trucks|filter(t => (t.last_inspection_date ?? '') is empty or date(t.last_inspection_date) < date('-1 year'))|length %}
 
 <div class="fleet-stats-row cols-3" style="margin-bottom:18px;">
     <a href="{{ path('fleet_trucks') }}" class="fleet-stat" style="text-decoration:none;cursor:pointer;">
@@ -84,14 +84,14 @@
                             </a>
                         </td>
                         <td>
-                            {% if truck.make or truck.model %}
+                            {% if (truck.make ?? false) or (truck.model ?? false) %}
                                 {{ truck.make ?? '' }} {{ truck.model ?? '' }}
                             {% else %}—{% endif %}
                         </td>
                         <td>{{ truck.year ?? '—' }}</td>
                         <td>{{ truck.plate_number ?? '—' }}</td>
                         <td>
-                            {% if truck.last_inspection_date %}
+                            {% if truck.last_inspection_date ?? false %}
                                 {{ truck.last_inspection_date|date('M d, Y') }}
                             {% else %}—{% endif %}
                         </td>
