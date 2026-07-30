@@ -32,11 +32,19 @@ class ApiClient
 
     public function request($path, $method = 'GET', $body = null, array $headers = null)
     {
-        $options = array();
+        $result = $this->requestWithStatus($path, $method, $body, $headers);
+        return $result['body'];
+    }
 
-        $options['headers'] = ['Content-Type' => 'application/json'];
+    /**
+     * Same as request() but returns both HTTP status and decoded body.
+     * Never throws; failed requests return status 0 with a body of ['error' => '...'].
+     */
+    public function requestWithStatus($path, $method = 'GET', $body = null, array $headers = null): array
+    {
+        $options = ['headers' => ['Content-Type' => 'application/json']];
 
-        if ($headers != null && is_array($headers)) {
+        if ($headers !== null && is_array($headers)) {
             $options['headers'] = array_merge($options['headers'], $headers);
         }
 
@@ -44,17 +52,27 @@ class ApiClient
             $options['body'] = json_encode($body);
         }
 
-        // $options['headers']['auto-auth'] = 'Bearer ' . $this->container->getParameter('auto_auth');
+        $status = 0;
+        $rawBody = '';
 
         try {
             $response = $this->client->request($method, $path, $options);
-            $responseBody = $response->getBody();
-        } catch( \Exception $e) {
-            $responseBody = $e->getResponse()->getBody();
+            $status = $response->getStatusCode();
+            $rawBody = (string) $response->getBody();
+        } catch (\GuzzleHttp\Exception\BadResponseException $e) {
+            $resp = $e->getResponse();
+            if ($resp) {
+                $status = $resp->getStatusCode();
+                $rawBody = (string) $resp->getBody();
+            } else {
+                return ['status' => 0, 'body' => ['error' => $e->getMessage()]];
+            }
+        } catch (\Exception $e) {
+            return ['status' => 0, 'body' => ['error' => $e->getMessage()]];
         }
-        $responseArray = json_decode($responseBody, true);
 
-        return $responseArray;
+        $decoded = json_decode($rawBody, true);
+        return ['status' => $status, 'body' => $decoded === null ? $rawBody : $decoded];
     }
 
     public function multipartRequest($path, $files, array $headers = null)

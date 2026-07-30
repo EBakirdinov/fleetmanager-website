@@ -44,4 +44,23 @@ class TruckService
         $headers = $this->accountService->getAuthorizationHeaders();
         return $this->accountService->request('truck/' . $id, 'DELETE', null, $headers);
     }
+
+    /**
+     * Assign a trailer to this truck. The truck owns the relationship, so the
+     * link is set from the truck side. return=true makes the API respond 200 + body.
+     */
+    public function assignTrailer($truckId, $trailerId)
+    {
+        $headers = $this->accountService->getAuthorizationHeaders();
+        return $this->accountService->request('truck/' . $truckId . '?return=true', 'PATCH', ['assignedTrailer' => $trailerId], $headers);
+    }
+
+    /**
+     * Clear a truck's assigned trailer.
+     */
+    public function unassignTrailer($truckId)
+    {
+        $headers = $this->accountService->getAuthorizationHeaders();
+        return $this->accountService->request('truck/' . $truckId . '?return=true', 'PATCH', ['assignedTrailer' => null], $headers);
+    }
 }

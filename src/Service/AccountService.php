@@ -86,15 +86,28 @@ class AccountService extends ApiClient
     }
 
     public function login($data) {
-        return $this->request('login_check', 'POST', $data);
+        // API's json_login expects `username`, and the User entity uses email as username.
+        $payload = [
+            'username' => $data['email'] ?? ($data['username'] ?? null),
+            'password' => $data['password'] ?? null,
+        ];
+        $result = $this->requestWithStatus('login_check', 'POST', $payload);
+        if ($result['status'] >= 200 && $result['status'] < 300 && !empty($result['body']['token'])) {
+            $this->session->set('stoken', $result['body']['token']);
+        }
+        return $result;
     }
 
     public function forgotpassword($data) {
-        return $this->request('public/forgot-password', 'POST', $data);
+        return $this->requestWithStatus('public/forgot-password', 'POST', $data);
     }
 
     public function register($data) {
-        return $this->request('register', 'POST', $data);
+        $result = $this->requestWithStatus('register', 'POST', $data);
+        if ($result['status'] >= 200 && $result['status'] < 300 && !empty($result['body']['token'])) {
+            $this->session->set('stoken', $result['body']['token']);
+        }
+        return $result;
     }
 
     public function logout() 
@@ -156,13 +169,33 @@ class AccountService extends ApiClient
         }
 
         $headers = $this->getAuthorizationHeaders();
-        $responseArray = $this->request('self/info', 'GET', null, $headers);
+        $result = $this->requestWithStatus('self/info', 'GET', null, $headers);
 
-        if (isset($responseArray['outcome']) && $responseArray['outcome'] == 'success') {
-            return $field != null ? $responseArray['data'][$field] : $responseArray['data'];
+        if ($result['status'] < 200 || $result['status'] >= 300 || !is_array($result['body'])) {
+            return null;
         }
 
-        return null;
+        $body = $result['body'];
+        // Legacy envelope support: {outcome:'success', data:{...}}
+        if (isset($body['outcome']) && $body['outcome'] === 'success' && isset($body['data'])) {
+            $body = $body['data'];
+        }
+
+        // JMS Serializer defaults to snake_case keys; normalize to camelCase for the React SPA.
+        $body = $this->snakeToCamelKeys($body);
+
+        return $field !== null ? ($body[$field] ?? null) : $body;
+    }
+
+    private function snakeToCamelKeys(array $data): array {
+        $result = [];
+        foreach ($data as $key => $value) {
+            $camelKey = is_string($key)
+                ? lcfirst(str_replace('_', '', ucwords($key, '_')))
+                : $key;
+            $result[$camelKey] = is_array($value) ? $this->snakeToCamelKeys($value) : $value;
+        }
+        return $result;
     }
 
     function updateUserData($data, $session) {

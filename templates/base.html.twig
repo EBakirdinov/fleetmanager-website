@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{% block title %}Fleet Manager{% endblock %}</title>
+        <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+        <script>
+            (function () {
+                try {
+                    var t = localStorage.getItem('theme');
+                    var isDark = t === 'dark' || ((!t || t === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                    if (isDark) document.documentElement.classList.add('dark');
+                } catch (e) {}
+            })();
+        </script>
+        {{ vite_entry_link_tags('main') }}
+        {% block head %}{% endblock %}
+        <style>html, body { height: 100%; width: 100%; margin: 0; } #root { height: 100%; width: 100%; overflow: hidden; }</style>
+    </head>
+    <body>
+        <div id="root"></div>
+        {{ vite_entry_script_tags('main') }}
+        {% block scripts %}{% endblock %}
+    </body>
+</html>
