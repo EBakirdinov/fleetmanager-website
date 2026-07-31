@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Download, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, Link2, X } from "lucide-react";
 import { Btn } from "../lib/ui";
-import { ApiError, type EldImportCandidate, type EldImportPreview, type EldImportResult } from "../lib/api";
+import { ApiError, type EldImportActions, type EldImportCandidate, type EldImportPreview, type EldImportResult } from "../lib/api";
 
 /**
  * Generic ELD import modal. Each ELD provides its own preview + import
- * functions (from api.ts) and this component handles the rest: fetching
- * candidates, letting the user select which new ones to import, submitting
- * the request, and reporting the result.
+ * functions (from api.ts); this component owns UX for the three per-row
+ * states:
  *
- * Rendered as a centered dialog rather than a slide-out drawer so the
- * candidate list can be wide and the interaction feels like a batch
- * operation instead of an edit.
+ *   - NEW:      no local match. Checkbox → creates a fresh local record.
+ *   - MATCH:    local record with same VIN/license found. Toggle → links
+ *               the two (writes eld_source + external_id onto the local
+ *               row). Off by default; user opts in.
+ *   - IMPORTED: local record already linked to this ELD. Not selectable.
  */
 export function ImportModal({
   open, onClose, sourceLabel, resource, previewFn, importFn, onImported,
@@ -23,16 +24,17 @@ export function ImportModal({
   /** What we're importing — used for copy only. */
   resource: "trucks" | "drivers";
   previewFn: () => Promise<EldImportPreview>;
-  importFn:  (externalIds: string[]) => Promise<EldImportResult>;
+  importFn:  (actions: EldImportActions) => Promise<EldImportResult>;
   /** Called after a successful import so the parent page can refresh its list. */
   onImported?: () => void;
 }) {
-  const [loading,    setLoading]    = useState(false);
-  const [importing,  setImporting]  = useState(false);
-  const [preview,    setPreview]    = useState<EldImportPreview | null>(null);
-  const [error,      setError]      = useState<string | null>(null);
-  const [selected,   setSelected]   = useState<Set<string>>(new Set());
-  const [result,     setResult]     = useState<EldImportResult | null>(null);
+  const [loading,   setLoading]   = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [preview,   setPreview]   = useState<EldImportPreview | null>(null);
+  const [error,     setError]     = useState<string | null>(null);
+  const [toCreate,  setToCreate]  = useState<Set<string>>(new Set());
+  const [toLink,    setToLink]    = useState<Set<string>>(new Set());
+  const [result,    setResult]    = useState<EldImportResult | null>(null);
 
   // Load preview whenever the modal opens.
   useEffect(() => {
@@ -43,7 +45,10 @@ export function ImportModal({
     previewFn()
       .then(p => {
         setPreview(p);
-        setSelected(new Set(p.candidates.filter(c => !c.exists).map(c => c.externalId)));
+        // Default: all NEW rows selected for create; MATCH rows opted out —
+        // user must explicitly acknowledge linking.
+        setToCreate(new Set(p.candidates.filter(c => c.match === null).map(c => c.externalId)));
+        setToLink(new Set());
       })
       .catch(e => setError(e instanceof ApiError ? e.message : "Failed to load preview"))
       .finally(() => setLoading(false));
@@ -57,12 +62,21 @@ export function ImportModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, importing, onClose]);
 
-  const newCount     = preview?.new     ?? 0;
-  const existCount   = preview?.existing ?? 0;
-  const selectedList = useMemo(() => Array.from(selected), [selected]);
+  const newCount      = preview?.new       ?? 0;
+  const existCount    = preview?.existing  ?? 0;
+  const matchCount    = preview?.matchable ?? 0;
+  const totalSelected = toCreate.size + toLink.size;
 
-  function toggle(externalId: string) {
-    setSelected(prev => {
+  function toggleCreate(externalId: string) {
+    setToCreate(prev => {
+      const next = new Set(prev);
+      if (next.has(externalId)) next.delete(externalId); else next.add(externalId);
+      return next;
+    });
+  }
+
+  function toggleLink(externalId: string) {
+    setToLink(prev => {
       const next = new Set(prev);
       if (next.has(externalId)) next.delete(externalId); else next.add(externalId);
       return next;
@@ -71,19 +85,33 @@ export function ImportModal({
 
   function selectAllNew() {
     if (!preview) return;
-    setSelected(new Set(preview.candidates.filter(c => !c.exists).map(c => c.externalId)));
+    setToCreate(new Set(preview.candidates.filter(c => c.match === null).map(c => c.externalId)));
+  }
+
+  function selectAllLinks() {
+    if (!preview) return;
+    setToLink(new Set(preview.candidates.filter(c => c.match && c.match.type !== "imported").map(c => c.externalId)));
   }
 
   function clearAll() {
-    setSelected(new Set());
+    setToCreate(new Set());
+    setToLink(new Set());
   }
 
   async function runImport() {
-    if (selectedList.length === 0 || !preview) return;
+    if (totalSelected === 0 || !preview) return;
     setImporting(true);
     setError(null);
+
+    const linkPairs = Array.from(toLink)
+      .map(extId => {
+        const c = preview.candidates.find(x => x.externalId === extId);
+        return c?.match ? { externalId: extId, localId: c.match.localId } : null;
+      })
+      .filter((p): p is { externalId: string; localId: number } => p !== null);
+
     try {
-      const res = await importFn(selectedList);
+      const res = await importFn({ create: Array.from(toCreate), link: linkPairs });
       setResult(res);
       onImported?.();
       if (res.errors.length === 0) {
@@ -145,15 +173,21 @@ export function ImportModal({
               <>
                 <div className="text-xs font-mono text-muted-foreground">
                   {preview.total} {resource} found · <span className="text-foreground">{newCount} new</span>
+                  {matchCount > 0 && <> · <span className="text-amber-400">{matchCount} to link</span></>}
                   {existCount > 0 && <> · {existCount} already imported</>}
                 </div>
 
-                <div className="flex items-center justify-between gap-2 border-y border-border py-2">
+                <div className="flex items-center justify-between gap-2 border-y border-border py-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Btn variant="outline" size="xs" onClick={selectAllNew} disabled={newCount === 0}>Select all new</Btn>
-                    <Btn variant="ghost"   size="xs" onClick={clearAll}    disabled={selected.size === 0}>Clear</Btn>
+                    {matchCount > 0 && (
+                      <Btn variant="outline" size="xs" onClick={selectAllLinks} disabled={matchCount === 0}>
+                        <Link2 size={10} className="inline mr-1" />Link all matches
+                      </Btn>
+                    )}
+                    <Btn variant="ghost"   size="xs" onClick={clearAll} disabled={totalSelected === 0}>Clear</Btn>
                   </div>
-                  <span className="text-xs font-mono text-muted-foreground">{selected.size} selected</span>
+                  <span className="text-xs font-mono text-muted-foreground">{totalSelected} selected</span>
                 </div>
 
                 <div className="flex flex-col divide-y divide-border/50">
@@ -162,8 +196,10 @@ export function ImportModal({
                       key={c.externalId}
                       candidate={c}
                       resource={resource}
-                      checked={selected.has(c.externalId)}
-                      onToggle={() => toggle(c.externalId)}
+                      createChecked={toCreate.has(c.externalId)}
+                      linkChecked={toLink.has(c.externalId)}
+                      onToggleCreate={() => toggleCreate(c.externalId)}
+                      onToggleLink={() => toggleLink(c.externalId)}
                     />
                   ))}
                   {preview.candidates.length === 0 && (
@@ -181,6 +217,7 @@ export function ImportModal({
                   <CheckCircle2 size={12} className="mt-0.5 flex-shrink-0" />
                   <span>
                     Imported {result.imported} {resource}
+                    {result.linked   > 0 && <> · {result.linked} linked</>}
                     {result.skipped  > 0 && <> · {result.skipped} skipped</>}
                     {(result.driversAutoImported ?? 0) > 0 && (
                       <> · {result.driversAutoImported} driver{result.driversAutoImported === 1 ? "" : "s"} auto-imported</>
@@ -202,7 +239,7 @@ export function ImportModal({
             )}
           </div>
 
-          {/* Footer — only when there's something to submit */}
+          {/* Footer */}
           {!loading && !error && preview && !result && (
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border flex-shrink-0 bg-card">
               <button
@@ -212,9 +249,9 @@ export function ImportModal({
               >
                 Cancel
               </button>
-              <Btn variant="primary" onClick={runImport} disabled={importing || selected.size === 0}>
+              <Btn variant="primary" onClick={runImport} disabled={importing || totalSelected === 0}>
                 <Download size={11} className="inline mr-1.5" />
-                {importing ? "Importing…" : `Import ${selected.size}`}
+                {importing ? "Importing…" : `Import ${totalSelected}`}
               </Btn>
             </div>
           )}
@@ -224,35 +261,73 @@ export function ImportModal({
   );
 }
 
-function CandidateRow({ candidate, resource, checked, onToggle }: {
+function CandidateRow({
+  candidate, resource, createChecked, linkChecked, onToggleCreate, onToggleLink,
+}: {
   candidate: EldImportCandidate;
   resource: "trucks" | "drivers";
-  checked: boolean;
-  onToggle: () => void;
+  createChecked: boolean;
+  linkChecked: boolean;
+  onToggleCreate: () => void;
+  onToggleLink: () => void;
 }) {
-  const disabled = candidate.exists;
-  const primary  = resource === "trucks" ? primaryTruckLine(candidate)  : primaryDriverLine(candidate);
-  const detail   = resource === "trucks" ? detailTruckLine(candidate)   : detailDriverLine(candidate);
+  const primary = resource === "trucks" ? primaryTruckLine(candidate) : primaryDriverLine(candidate);
+  const detail  = resource === "trucks" ? detailTruckLine(candidate)  : detailDriverLine(candidate);
+  const match   = candidate.match;
 
+  // Already-imported: fully greyed-out, informational only.
+  if (match && match.type === "imported") {
+    return (
+      <div className="flex items-start gap-3 py-2 opacity-50 cursor-not-allowed">
+        <div className="mt-0.5 w-4 h-4 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-foreground truncate">{primary}</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-muted-foreground tracking-wider uppercase">
+              Already imported
+            </span>
+          </div>
+          {detail && <div className="text-xs font-mono text-muted-foreground truncate">{detail}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // VIN / license match: prompt to link the local record.
+  if (match) {
+    return (
+      <label className="flex items-start gap-3 py-2 cursor-pointer hover:bg-amber-500/5">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 rounded border-amber-500/60 bg-input-background text-amber-500 focus:ring-amber-500/50"
+          checked={linkChecked}
+          onChange={onToggleLink}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-foreground truncate">{primary}</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-amber-400 tracking-wider uppercase inline-flex items-center gap-1">
+              <Link2 size={9} />Link to {(resource == "trucks") ? "#" : ""}{match.localLabel}
+            </span>
+          </div>
+          {detail && <div className="text-xs font-mono text-muted-foreground truncate">{detail}</div>}
+        </div>
+      </label>
+    );
+  }
+
+  // New: standard create checkbox.
   return (
-    <label
-      className={`flex items-start gap-3 py-2 ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-white/[0.02]"}`}
-    >
+    <label className="flex items-start gap-3 py-2 cursor-pointer hover:bg-white/[0.02]">
       <input
         type="checkbox"
         className="mt-0.5 h-4 w-4 rounded border-border bg-input-background text-primary focus:ring-primary/50"
-        checked={checked}
-        disabled={disabled}
-        onChange={onToggle}
+        checked={createChecked}
+        onChange={onToggleCreate}
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm text-foreground truncate">{primary}</span>
-          {disabled && (
-            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-muted-foreground tracking-wider uppercase">
-              Already imported
-            </span>
-          )}
         </div>
         {detail && <div className="text-xs font-mono text-muted-foreground truncate">{detail}</div>}
       </div>

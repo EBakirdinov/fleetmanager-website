@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { MapPin, Plug, Navigation } from "lucide-react";
+import { useTheme } from "next-themes";
+import { MapPin, Plug } from "lucide-react";
 import { Btn } from "../lib/ui";
 import { useAuth } from "../lib/auth";
 import { apiGetIntegrationConfig, apiGetFleetLocations, ApiError, type TruckLocation } from "../lib/api";
@@ -54,6 +55,35 @@ const DARK_MAP_STYLE: object[] = [
   { featureType: "water",        elementType: "geometry",        stylers: [{ color: "#0f1923" }] },
 ];
 
+/**
+ * Light-mode counterpart — same structure (hides clutter labels, keeps
+ * administrative labels) but with a bright palette that pairs with the
+ * app's light theme.
+ */
+const LIGHT_MAP_STYLE: object[] = [
+  { elementType: "geometry",           stylers: [{ color: "#f1f5f9" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+  { elementType: "labels.text.fill",   stylers: [{ color: "#475569" }] },
+
+  { featureType: "poi",     elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "road",    elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "water",   elementType: "labels", stylers: [{ visibility: "off" }] },
+
+  { featureType: "administrative",          elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
+  { featureType: "administrative.province", elementType: "labels.text.fill", stylers: [{ color: "#1e293b" }] },
+  { featureType: "administrative.country",  elementType: "labels.text.fill", stylers: [{ color: "#1e293b" }] },
+
+  { featureType: "road",         elementType: "geometry",        stylers: [{ color: "#ffffff" }] },
+  { featureType: "road",         elementType: "geometry.stroke", stylers: [{ color: "#e2e8f0" }] },
+  { featureType: "road.highway", elementType: "geometry",        stylers: [{ color: "#ffe8a3" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#f5c85c" }] },
+  { featureType: "transit",      elementType: "geometry",        stylers: [{ color: "#e2e8f0" }] },
+  { featureType: "poi.park",     elementType: "geometry",        stylers: [{ color: "#d6ecd6" }] },
+  { featureType: "water",        elementType: "geometry",        stylers: [{ color: "#c7dff2" }] },
+];
+
 /** Global promise cache so multiple mounts don't re-inject the script. */
 let mapsScriptPromise: Promise<void> | null = null;
 
@@ -89,83 +119,149 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-function infoWindowHtml(t: TruckLocation): string {
-  // Kept intentionally lightweight — Google's InfoWindow renders raw HTML.
-  const num    = t.truckNumber ? escapeHtml(t.truckNumber) : `#${t.truckId}`;
-  const driver = t.driverName  ? escapeHtml(t.driverName)  : "Unassigned";
-  const where  = [t.location, t.state].filter(Boolean).map(escapeHtml).join(", ");
-  const when   = timeAgo(t.time);
-  return `
-    <div style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;line-height:1.4;color:#0f1923">
-      <div style="font-weight:600;color:#0f1923;margin-bottom:2px">${num}</div>
-      <div>${driver}</div>
-      ${where ? `<div style="color:#556879">${where}</div>` : ""}
-      ${when  ? `<div style="color:#556879">${when}</div>`  : ""}
-    </div>
-  `;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
-}
-
 // ─── Map component with live markers ─────────────────────────────────────────
 
 /**
  * Minimal typing for the bits of the Google Maps API we touch. Full types would
  * mean pulling `@types/google.maps` — overkill for this surface.
  */
-type GMap    = { setCenter: (c: { lat: number; lng: number }) => void; setZoom: (z: number) => void };
-type GMarker = {
-  setPosition: (c: { lat: number; lng: number }) => void;
-  setIcon:     (i: object) => void;
-  setMap:      (m: GMap | null) => void;
-  addListener: (event: string, cb: () => void) => void;
-};
-type GInfoWin = {
-  setContent: (html: string) => void;
-  open:       (opts: { map: GMap; anchor: GMarker }) => void;
-  close:      () => void;
-};
+type GMap     = { setCenter: (c: { lat: number; lng: number }) => void; setZoom: (z: number) => void; setOptions: (opts: object) => void };
+type GLatLng  = { lat: () => number; lng: () => number };
+type GPoint      = { x: number; y: number };
+type GProjection = { fromLatLngToDivPixel: (ll: GLatLng) => GPoint | null };
+
+/** Bare minimum of google.maps.OverlayView we lean on. */
+interface GOverlayCtor {
+  new (): GOverlayInstance;
+  prototype: {
+    onAdd?:    () => void;
+    draw?:     () => void;
+    onRemove?: () => void;
+  };
+}
+interface GOverlayInstance {
+  setMap(m: GMap | null): void;
+  getPanes(): { overlayMouseTarget: HTMLElement };
+  getProjection(): GProjection | null;
+}
 
 interface GoogleNamespace {
   maps: {
-    Map: new (el: HTMLElement, opts: object) => GMap;
-    Marker: new (opts: object) => GMarker;
-    InfoWindow: new (opts?: object) => GInfoWin;
-    Point: new (x: number, y: number) => object;
-    Size: new (w: number, h: number) => object;
+    Map:          new (el: HTMLElement, opts: object) => GMap;
+    LatLng:       new (lat: number, lng: number) => GLatLng;
+    OverlayView:  GOverlayCtor;
     ControlPosition: Record<string, number>;
-    SymbolPath: Record<string, number>;
   };
 }
 
-/**
- * Marker glyph = lucide's `Truck` icon, filled for readability on the dark map:
- *   - Cargo body (left) filled slate gray
- *   - Cab (right, sloped windshield) filled white
- *   - Wheels filled dark navy
- *   - Thin dark stroke defines edges without overwhelming the fills
- *
- * Paths are copied verbatim from lucide-react's Truck icon so upstream
- * visual updates can be re-synced by pasting them again.
- */
-function truckIconSvg(): string {
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" ` +
-      `stroke="#0f1923" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">` +
-      // Cargo/trailer body — the wider box on the left.
-      `<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" fill="#94a3b8"/>` +
-      // Cab — the smaller sloped shape on the right (front of the truck).
-      `<path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" fill="#ffffff"/>` +
-      // Wheels.
-      `<circle cx="17" cy="18" r="2" fill="#0f1923"/>` +
-      `<circle cx="7"  cy="18" r="2" fill="#0f1923"/>` +
-    `</svg>`
-  );
+// ─── Per-truck color + overlay factory ───────────────────────────────────────
+
+/** Injects the pulsing-marker CSS keyframes once per document. */
+function ensureTruckOverlayStyles(): void {
+  if (typeof document === "undefined") return;
+  if (document.getElementById("truck-overlay-styles")) return;
+  const style = document.createElement("style");
+  style.id = "truck-overlay-styles";
+  style.textContent = `
+    .truck-overlay { position: absolute; transform: translate(-50%, -50%); pointer-events: none; width: 16px; height: 16px; }
+    .truck-overlay-dot {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 2px solid rgba(15, 25, 35, 0.9);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+      z-index: 2;
+    }
+    .truck-overlay-pulse {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      animation: truck-overlay-pulse 2.4s ease-out infinite;
+      z-index: 1;
+      opacity: 0;
+    }
+    @keyframes truck-overlay-pulse {
+      0%   { transform: scale(1);   opacity: 0.6; }
+      100% { transform: scale(3.6); opacity: 0;   }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
-const TRUCK_ICON_URL = "data:image/svg+xml;utf8," + encodeURIComponent(truckIconSvg());
+/**
+ * Custom map marker: a colored dot with an outward-pulsing ring. Built on
+ * OverlayView so we can use CSS animation — Google Maps native Marker /
+ * Symbol don't support keyframe animations.
+ */
+interface PulsingOverlay extends GOverlayInstance {
+  setPosition(latLng: GLatLng): void;
+  getPosition(): GLatLng;
+  setColor(color: string): void;
+}
+
+function createPulsingOverlayClass(google: GoogleNamespace): new (position: GLatLng, color: string) => PulsingOverlay {
+  return class extends google.maps.OverlayView implements PulsingOverlay {
+    private position: GLatLng;
+    private color: string;
+    private div: HTMLDivElement | null = null;
+    private dotEl: HTMLDivElement | null = null;
+    private pulseEl: HTMLDivElement | null = null;
+
+    constructor(position: GLatLng, color: string) {
+      super();
+      this.position = position;
+      this.color    = color;
+    }
+
+    onAdd() {
+      const div = document.createElement("div");
+      div.className = "truck-overlay";
+      const pulse = document.createElement("div");
+      pulse.className = "truck-overlay-pulse";
+      pulse.style.background = this.color;
+      const dot = document.createElement("div");
+      dot.className = "truck-overlay-dot";
+      dot.style.background = this.color;
+      div.appendChild(pulse);
+      div.appendChild(dot);
+
+      this.div = div;
+      this.dotEl = dot;
+      this.pulseEl = pulse;
+      this.getPanes().overlayMouseTarget.appendChild(div);
+    }
+
+    draw() {
+      if (!this.div) return;
+      const proj = this.getProjection();
+      if (!proj) return;
+      const p = proj.fromLatLngToDivPixel(this.position);
+      if (!p) return;
+      this.div.style.left = p.x + "px";
+      this.div.style.top  = p.y + "px";
+    }
+
+    onRemove() {
+      if (this.div && this.div.parentNode) {
+        this.div.parentNode.removeChild(this.div);
+      }
+      this.div = this.dotEl = this.pulseEl = null;
+    }
+
+    setPosition(latLng: GLatLng) {
+      this.position = latLng;
+      this.draw();
+    }
+
+    getPosition(): GLatLng {
+      return this.position;
+    }
+
+    setColor(color: string) {
+      this.color = color;
+      if (this.dotEl)   this.dotEl.style.background   = color;
+      if (this.pulseEl) this.pulseEl.style.background = color;
+    }
+  };
+}
 
 function GoogleMap({ apiKey, positions, onMapReady }: {
   apiKey: string;
@@ -176,12 +272,14 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const mapRef      = useRef<GMap | null>(null);
-  const markersRef  = useRef<Map<number, GMarker>>(new Map());
-  const infoWinRef  = useRef<GInfoWin | null>(null);
-  const positionsRef = useRef<Map<number, TruckLocation>>(new Map());
+  const mapRef        = useRef<GMap | null>(null);
+  const overlaysRef   = useRef<Map<number, PulsingOverlay>>(new Map());
+  const overlayCtorRef = useRef<ReturnType<typeof createPulsingOverlayClass> | null>(null);
   const onMapReadyRef = useRef(onMapReady);
   onMapReadyRef.current = onMapReady;
+
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme !== "light"; // treat undefined/system-dark as dark; only "light" flips.
 
   // Boot the map once per apiKey.
   useEffect(() => {
@@ -199,10 +297,13 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
           fullscreenControl: false,
           zoomControlOptions:  { position: google.maps.ControlPosition.LEFT_BOTTOM },
           panControlOptions:   { position: google.maps.ControlPosition.LEFT_BOTTOM },
-          styles: DARK_MAP_STYLE,
+          styles: isDark ? DARK_MAP_STYLE : LIGHT_MAP_STYLE,
         });
         mapRef.current = map;
-        infoWinRef.current = new google.maps.InfoWindow();
+        // OverlayView subclasses can only be defined after the Maps script
+        // has provided the base class.
+        overlayCtorRef.current = createPulsingOverlayClass(google);
+        ensureTruckOverlayStyles();
         onMapReadyRef.current?.(map);
         // Flip state so the marker-sync effect re-runs with `positions` that
         // may have arrived before the map finished booting.
@@ -212,7 +313,14 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
         if (!cancelled) setError(e instanceof Error ? e.message : "Map failed to load");
       });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey]);
+
+  // Re-apply map style when the user toggles theme after the map has booted.
+  useEffect(() => {
+    if (!mapRef.current) return;
+    mapRef.current.setOptions({ styles: isDark ? DARK_MAP_STYLE : LIGHT_MAP_STYLE });
+  }, [isDark]);
 
   // Sync markers with the latest positions whenever the array changes OR
   // whenever the map finishes booting (which may happen after positions have
@@ -220,53 +328,41 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
   useEffect(() => {
     if (!mapReady) return;
     const map = mapRef.current;
-    if (!map || typeof window === "undefined") return;
+    const OverlayCtor = overlayCtorRef.current;
+    if (!map || !OverlayCtor || typeof window === "undefined") return;
     const google = (window as unknown as { google?: GoogleNamespace }).google;
     if (!google) return;
 
     const seen = new Set<number>();
     for (const t of positions) {
       seen.add(t.truckId);
-      positionsRef.current.set(t.truckId, t);
-      const existing = markersRef.current.get(t.truckId);
-      const icon = markerIcon(google, t.direction);
+      const latLng = new google.maps.LatLng(t.lat, t.lng);
+      const color  = t.color;
+
+      const existing = overlaysRef.current.get(t.truckId);
       if (existing) {
-        existing.setPosition({ lat: t.lat, lng: t.lng });
-        existing.setIcon(icon);
+        existing.setPosition(latLng);
+        existing.setColor(color);
       } else {
-        const marker = new google.maps.Marker({
-          map,
-          position: { lat: t.lat, lng: t.lng },
-          title: t.truckNumber ?? `#${t.truckId}`,
-          icon,
-        });
-        marker.addListener("click", () => {
-          const iw = infoWinRef.current;
-          const latest = positionsRef.current.get(t.truckId);
-          if (!iw || !latest) return;
-          iw.setContent(infoWindowHtml(latest));
-          iw.open({ map, anchor: marker });
-        });
-        markersRef.current.set(t.truckId, marker);
+        const overlay = new OverlayCtor(latLng, color);
+        overlay.setMap(map);
+        overlaysRef.current.set(t.truckId, overlay);
       }
     }
 
-    // Drop markers for trucks the sync no longer reports.
-    for (const [id, marker] of markersRef.current) {
+    // Drop overlays for trucks the sync no longer reports.
+    for (const [id, overlay] of overlaysRef.current) {
       if (!seen.has(id)) {
-        marker.setMap(null);
-        markersRef.current.delete(id);
-        positionsRef.current.delete(id);
+        overlay.setMap(null);
+        overlaysRef.current.delete(id);
       }
     }
   }, [positions, mapReady]);
 
-  // Detach markers on unmount so they don't leak if the map is remounted.
+  // Detach overlays on unmount so they don't leak if the map is remounted.
   useEffect(() => () => {
-    for (const marker of markersRef.current.values()) marker.setMap(null);
-    markersRef.current.clear();
-    positionsRef.current.clear();
-    infoWinRef.current?.close();
+    for (const overlay of overlaysRef.current.values()) overlay.setMap(null);
+    overlaysRef.current.clear();
   }, []);
 
   if (error) {
@@ -278,17 +374,6 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
   }
 
   return <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden bg-muted" />;
-}
-
-function markerIcon(google: GoogleNamespace, _direction: string | null): object {
-  // Google Maps Icon (image-based) — no rotation support. Direction stays in
-  // the info window/sidebar. If direction on the map becomes important, we
-  // can composite a rotated arrow around this disc via OverlayView.
-  return {
-    url:        TRUCK_ICON_URL,
-    scaledSize: new google.maps.Size(24, 24),
-    anchor:     new google.maps.Point(12, 12),
-  };
 }
 
 // ─── Aside: right-column truck list ──────────────────────────────────────────
@@ -328,8 +413,14 @@ function TruckListAside({ positions, loading, error, onFocus }: {
             className="w-full text-left px-3 py-2 border-b border-border/50 hover:bg-white/[0.03] transition-colors"
           >
             <div className="flex items-center gap-2">
-              <Navigation size={11} className="text-primary flex-shrink-0" />
-              <span className="text-xs font-mono text-primary font-semibold truncate">{t.truckNumber ?? `#${t.truckId}`}</span>
+              <span
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-black/40"
+                style={{ background: t.color, boxShadow: `0 0 6px ${t.color}66` }}
+                aria-hidden="true"
+              />
+              <span className="text-xs font-mono font-semibold truncate" style={{ color: t.color }}>
+                {t.truckNumber ?? `#${t.truckId}`}
+              </span>
               <span className="text-[10px] font-mono text-muted-foreground ml-auto">{timeAgo(t.time)}</span>
             </div>
             <div className="text-xs text-foreground truncate mt-0.5">{t.driverName ?? "Unassigned"}</div>

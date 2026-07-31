@@ -234,6 +234,12 @@ export interface TrailerItem {
   liftgate?: boolean;
   hazmat_certified?: boolean;
   thermo_king_unit?: boolean;
+  odometer?: number | null;
+  home_location?: string | null;
+  purchase_date?: string | null;
+  /** Doctrine decimal comes across as a numeric string ("24500.00"). */
+  purchase_price?: string | null;
+  notes?: string | null;
   assigned_truck?: { id: number; truck_number: string } | null;
 }
 
@@ -512,13 +518,28 @@ export async function apiGetIntegrationConfig<T = Record<string, string>>(slug: 
 // ─── ELD imports ─────────────────────────────────────────────────────────────
 
 /**
+ * Info about the local record a Quantum candidate matches:
+ *   - "imported" — already linked to this ELD (nothing to do).
+ *   - "vin"      — a local Truck exists with the same VIN (offer to link).
+ *   - "license"  — same for Driver by license number.
+ */
+export interface EldImportMatch {
+  type:       "imported" | "vin" | "license";
+  localId:    number;
+  localLabel: string;
+}
+
+/**
  * A single record fetched from an ELD (truck or driver). Field set varies
  * by resource; `externalId` is always present and is what we send back to
  * the API to complete the import.
  */
 export interface EldImportCandidate {
   externalId: string;
+  /** True for either an already-imported or a VIN/license match. */
   exists: boolean;
+  /** Present when a local record was found — tells the UI how to act. */
+  match: EldImportMatch | null;
   [key: string]: unknown;
 }
 
@@ -528,11 +549,21 @@ export interface EldImportPreview {
   total:      number;
   new:        number;
   existing:   number;
+  /** Count of candidates the user could opt in to link to an existing record. */
+  matchable:  number;
   candidates: EldImportCandidate[];
+}
+
+/** Request body for the two-mode import endpoint. */
+export interface EldImportActions {
+  create: string[];                                            // externalIds → new records
+  link:   Array<{ externalId: string; localId: number }>;      // pairs → wire local to ELD
 }
 
 export interface EldImportResult {
   imported: number;
+  /** Local records that got wired to the ELD via a link action. */
+  linked:   number;
   skipped:  number;
   /**
    * Trucks import may auto-import (and auto-assign) drivers Quantum reports
@@ -546,10 +577,10 @@ export async function apiQuantumPreviewTrucks(): Promise<EldImportPreview> {
   return apiProxy<EldImportPreview>("quantum/import/trucks");
 }
 
-export async function apiQuantumImportTrucks(externalIds: string[]): Promise<EldImportResult> {
+export async function apiQuantumImportTrucks(actions: EldImportActions): Promise<EldImportResult> {
   return apiProxy<EldImportResult>("quantum/import/trucks", {
     method: "POST",
-    body: JSON.stringify({ externalIds }),
+    body: JSON.stringify(actions),
   });
 }
 
@@ -557,10 +588,10 @@ export async function apiQuantumPreviewDrivers(): Promise<EldImportPreview> {
   return apiProxy<EldImportPreview>("quantum/import/drivers");
 }
 
-export async function apiQuantumImportDrivers(externalIds: string[]): Promise<EldImportResult> {
+export async function apiQuantumImportDrivers(actions: EldImportActions): Promise<EldImportResult> {
   return apiProxy<EldImportResult>("quantum/import/drivers", {
     method: "POST",
-    body: JSON.stringify({ externalIds }),
+    body: JSON.stringify(actions),
   });
 }
 
@@ -582,6 +613,8 @@ export interface TruckLocation {
   direction: string | null;
   time:      string | null;
   source:    string;
+  /** Deterministic per-truck color assigned server-side (CSS color string). */
+  color:     string;
 }
 
 interface FleetCacheEnvelope<T> {

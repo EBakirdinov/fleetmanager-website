@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 import { useRefData } from "../lib/data";
 import { Container, CheckCircle, AlertCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import {
-  KpiCard, StatusPill, Btn, SlideDrawer, DrawerSection, DrawerFieldRow,
+  KpiCard, Btn, SlideDrawer, DrawerSection, DrawerFieldRow,
   DrawerField as Field, DrawerSelect as Select, DrawerFieldRow as FieldRow, ToggleButton as Toggle,
-  ActionsMenu,
+  DrawerTextarea as Textarea, ActionsMenu,
 } from "../lib/ui";
 import {
   apiListTrailers, apiCreateTrailer, apiUpdateTrailer, apiDeleteTrailer, ApiError, type TrailerItem,
@@ -50,6 +50,11 @@ interface TrailerForm {
   liftgate: boolean;
   hazmatCertified: boolean;
   thermoKingUnit: boolean;
+  odometer: string;
+  homeLocation: string;
+  purchaseDate: string;
+  purchasePrice: string;
+  notes: string;
 }
 
 const emptyForm = (): TrailerForm => ({
@@ -60,6 +65,7 @@ const emptyForm = (): TrailerForm => ({
   status: "1",
   airRideSuspension: false, slidingTandem: false, ventilation: false, absBrakes: false,
   eTrack: false, liftgate: false, hazmatCertified: false, thermoKingUnit: false,
+  odometer: "", homeLocation: "", purchaseDate: "", purchasePrice: "", notes: "",
 });
 
 function formFromItem(t: TrailerItem): TrailerForm {
@@ -95,6 +101,11 @@ function formFromItem(t: TrailerItem): TrailerForm {
     liftgate:          t.liftgate                ?? false,
     hazmatCertified:   t.hazmat_certified        ?? false,
     thermoKingUnit:    t.thermo_king_unit        ?? false,
+    odometer:          t.odometer?.toString()    ?? "",
+    homeLocation:      t.home_location           ?? "",
+    purchaseDate:      t.purchase_date           ?? "",
+    purchasePrice:     t.purchase_price          ?? "",
+    notes:             t.notes                   ?? "",
   };
 }
 
@@ -116,6 +127,7 @@ const TRAILER_VALIDATORS: Partial<Record<string, (v: string) => string | null>> 
   gvwr:            validatePositiveInt,
   tareWeight:      validatePositiveInt,
   payloadCapacity: validatePositiveInt,
+  odometer:        validatePositiveInt,
 };
 
 function validateAllTrailer(form: TrailerForm): Record<string, string | null> {
@@ -135,7 +147,7 @@ function validateAllTrailer(form: TrailerForm): Record<string, string | null> {
 
 // ─── Trailer form component ──────────────────────────────────────────────────
 
-type TrailerStrField = "trailerNumber"|"type"|"year"|"makeId"|"modelId"|"vin"|"plateNumber"|"color"|"length"|"width"|"height"|"axleCount"|"tireSize"|"tireCount"|"gvwr"|"tareWeight"|"payloadCapacity"|"doorType"|"roofType"|"floorType"|"sideMaterial"|"frontMaterial"|"status";
+type TrailerStrField = "trailerNumber"|"type"|"year"|"makeId"|"modelId"|"vin"|"plateNumber"|"color"|"length"|"width"|"height"|"axleCount"|"tireSize"|"tireCount"|"gvwr"|"tareWeight"|"payloadCapacity"|"doorType"|"roofType"|"floorType"|"sideMaterial"|"frontMaterial"|"status"|"odometer"|"homeLocation"|"purchaseDate"|"purchasePrice"|"notes";
 
 type TrailerBoolField = "airRideSuspension"|"slidingTandem"|"ventilation"|"absBrakes"|"eTrack"|"liftgate"|"hazmatCertified"|"thermoKingUnit";
 
@@ -245,32 +257,39 @@ function TrailerFormFields({
             {frontMaterials.map(v => <option key={v}>{v}</option>)}
           </Select>
         </DrawerFieldRow>
+        <div>
+          <label className="text-xs font-mono text-muted-foreground tracking-wider uppercase mb-2 block">Additional Features</label>
+          <div className="flex flex-wrap gap-2">
+            <Toggle label="Air Ride"       active={form.airRideSuspension} onToggle={() => setBool("airRideSuspension", !form.airRideSuspension)} />
+            <Toggle label="Sliding Tandem" active={form.slidingTandem}     onToggle={() => setBool("slidingTandem",     !form.slidingTandem)} />
+            <Toggle label="Ventilation"    active={form.ventilation}       onToggle={() => setBool("ventilation",       !form.ventilation)} />
+            <Toggle label="ABS Brakes"     active={form.absBrakes}         onToggle={() => setBool("absBrakes",         !form.absBrakes)} />
+            <Toggle label="E-Track"        active={form.eTrack}            onToggle={() => setBool("eTrack",            !form.eTrack)} />
+            <Toggle label="Liftgate"       active={form.liftgate}          onToggle={() => setBool("liftgate",          !form.liftgate)} />
+            <Toggle label="Thermo King"    active={form.thermoKingUnit}    onToggle={() => setBool("thermoKingUnit",    !form.thermoKingUnit)} />
+            <Toggle label="Hazmat"         active={form.hazmatCertified}   onToggle={() => setBool("hazmatCertified",   !form.hazmatCertified)} />
+          </div>
+        </div>
       </DrawerSection>
 
       <DrawerSection title="Operational Information">
-        <Select label="Status" value={form.status} onChange={v => set("status", v)}>
-          <option value="1">Active</option>
-          <option value="0">Inactive</option>
-        </Select>
-        <div className="flex flex-wrap gap-2">
-          <Toggle label="Air Ride"       active={form.airRideSuspension} onToggle={() => setBool("airRideSuspension", !form.airRideSuspension)} />
-          <Toggle label="Sliding Tandem" active={form.slidingTandem}     onToggle={() => setBool("slidingTandem",     !form.slidingTandem)} />
-          <Toggle label="Ventilation"    active={form.ventilation}       onToggle={() => setBool("ventilation",       !form.ventilation)} />
-          <Toggle label="ABS Brakes"     active={form.absBrakes}         onToggle={() => setBool("absBrakes",         !form.absBrakes)} />
-          <Toggle label="E-Track"        active={form.eTrack}            onToggle={() => setBool("eTrack",            !form.eTrack)} />
-          <Toggle label="Liftgate"       active={form.liftgate}          onToggle={() => setBool("liftgate",          !form.liftgate)} />
-          <Toggle label="Hazmat"         active={form.hazmatCertified}   onToggle={() => setBool("hazmatCertified",   !form.hazmatCertified)} />
-          <Toggle label="Thermo King"    active={form.thermoKingUnit}    onToggle={() => setBool("thermoKingUnit",    !form.thermoKingUnit)} />
-        </div>
+        <DrawerFieldRow>
+          <Field label="Current Odometer (mi)" value={form.odometer} type="number" mono onChange={v => set("odometer", v)} onBlur={() => onBlur("odometer")} error={errors.odometer} />
+          <Select label="Status" value={form.status} onChange={v => set("status", v)}>
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </Select>
+        </DrawerFieldRow>
+        <Field label="Home Location" value={form.homeLocation} onChange={v => set("homeLocation", v)} hint="City, state or depot" />
+        <DrawerFieldRow>
+          <Field label="Purchase Date" value={form.purchaseDate} type="date" onChange={v => set("purchaseDate", v)} />
+          <Field label="Purchase Price ($)" value={form.purchasePrice} type="number" mono onChange={v => set("purchasePrice", v)} hint="Dollars and cents (e.g. 24500.00)" />
+        </DrawerFieldRow>
+        <Textarea label="Notes" value={form.notes} onChange={v => set("notes", v)} />
       </DrawerSection>
     </>
   );
 }
-
-// ─── Status helpers ──────────────────────────────────────────────────────────
-
-const TRAILER_STATUS_LABEL: Record<number, string> = { 1: "Active", 0: "Inactive" };
-const TRAILER_STATUS_COLOR: Record<number, string> = { 1: "#10b981", 0: "#ef4444" };
 
 // ─── Static placeholder chart data ───────────────────────────────────────────
 
@@ -420,6 +439,11 @@ export default function Trailers() {
         liftgate:          form.liftgate,
         hazmatCertified:   form.hazmatCertified,
         thermoKingUnit:    form.thermoKingUnit,
+        odometer:          form.odometer      ? parseInt(form.odometer, 10) : null,
+        homeLocation:      form.homeLocation  || null,
+        purchaseDate:      form.purchaseDate  || null,
+        purchasePrice:     form.purchasePrice || null,
+        notes:             form.notes         || null,
       };
       if (drawerMode === "add") {
         await apiCreateTrailer(payload);
@@ -507,7 +531,7 @@ export default function Trailers() {
               <table className="w-full min-w-[900px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    {["Trailer #", "Type", "Make / Model / Year", "VIN", "Plate", "Color", "Status", ""].map(h => (
+                    {["Trailer", "Type", "Make / Model", "VIN", "License Plate", "Odometer", ""].map(h => (
                       <th key={h} className="text-left px-3 py-2.5 text-xs font-mono text-muted-foreground tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -520,16 +544,12 @@ export default function Trailers() {
                       </td>
                       <td className="px-3 py-2.5 text-xs text-muted-foreground">{t.type ?? "—"}</td>
                       <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {[t.make?.name, t.model?.name, t.year].filter(Boolean).join(" ") || "—"}
+                        {[t.make?.name, t.model?.name].filter(Boolean).join(" ") || "—"}
                       </td>
                       <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{t.vin ?? "—"}</td>
                       <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{t.plate_number ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{t.color ?? "—"}</td>
-                      <td className="px-3 py-2.5">
-                        <StatusPill
-                          label={TRAILER_STATUS_LABEL[t.status] ?? String(t.status)}
-                          color={TRAILER_STATUS_COLOR[t.status] ?? "#6b7e96"}
-                        />
+                      <td className="px-3 py-2.5 text-xs font-mono text-foreground whitespace-nowrap">
+                        {t.odometer != null ? `${t.odometer.toLocaleString()} mi` : "—"}
                       </td>
                       <td className="px-3 py-2.5">
                         <ActionsMenu items={[
@@ -541,7 +561,7 @@ export default function Trailers() {
                   ))}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-3 py-10 text-center text-xs font-mono text-muted-foreground">No trailers found</td>
+                      <td colSpan={7} className="px-3 py-10 text-center text-xs font-mono text-muted-foreground">No trailers found</td>
                     </tr>
                   )}
                 </tbody>

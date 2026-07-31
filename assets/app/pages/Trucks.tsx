@@ -131,7 +131,7 @@ function validateAllTruck(form: TruckForm): Record<string, string | null> {
 
 // ─── Truck form component ────────────────────────────────────────────────────
 
-function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoading, exteriorImage }: {
+function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoading, trailers, currentTruckId, exteriorImage }: {
   form: TruckForm;
   set: (k: keyof TruckForm, v: string) => void;
   errors: Record<string, string | null>;
@@ -139,6 +139,10 @@ function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoadi
   makes: MakeItem[];
   models: ModelItem[];
   modelsLoading: boolean;
+  trailers: TrailerItem[];
+  /** Id of the truck being edited (null in add mode) — used to hint when a
+   *  trailer is currently attached to a *different* truck. */
+  currentTruckId: number | null;
   /** Rendered inline next to Cab Type / Sleeper Size when provided (edit mode only). */
   exteriorImage?: {
     imageUrl: string | null;
@@ -254,10 +258,21 @@ function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoadi
           <Field label="Current Mileage" value={form.currentMileage} type="number" mono onChange={v => set("currentMileage", v)} onBlur={() => onBlur("currentMileage")} error={errors.currentMileage} />
           <Field label="Engine Hours" value={form.engineHours} type="number" mono onChange={v => set("engineHours", v)} onBlur={() => onBlur("engineHours")} error={errors.engineHours} />
         </DrawerFieldRow>
-        <Select label="Status" value={form.status} onChange={v => set("status", v)}>
-          <option value="1">Active</option>
-          <option value="0">Inactive</option>
-        </Select>
+        <DrawerFieldRow>
+          <Select label="Assigned Trailer" value={form.assignedTrailerId} onChange={v => set("assignedTrailerId", v)}>
+            <option value="">— Unassigned —</option>
+            {trailers.map(tr => {
+              const num   = tr.trailer_number ?? `#${tr.id}`;
+              const owner = tr.assigned_truck;
+              const onOther = owner && owner.id !== currentTruckId ? ` (on ${owner.truck_number || `#${owner.id}`})` : "";
+              return <option key={tr.id} value={tr.id}>{num}{onOther}</option>;
+            })}
+          </Select>
+          <Select label="Status" value={form.status} onChange={v => set("status", v)}>
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </Select>
+        </DrawerFieldRow>
       </DrawerSection>
 
       <DrawerSection title="Maintenance Intervals">
@@ -321,6 +336,7 @@ export default function Trucks() {
   const [makes,         setMakes]         = useState<MakeItem[]>([]);
   const [models,        setModels]        = useState<ModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [trailers,      setTrailers]      = useState<TrailerItem[]>([]);
   const [exteriorHash,  setExteriorHash]  = useState<string | null>(null);
   const [imageBusy,     setImageBusy]     = useState(false);
   const [positions,     setPositions]     = useState<TruckLocation[]>([]);
@@ -365,6 +381,7 @@ export default function Trucks() {
 
   useEffect(() => {
     apiListTruckMakes().then(setMakes).catch(() => setMakes([]));
+    apiListTrailers().then(setTrailers).catch(() => setTrailers([]));
   }, []);
 
   // Poll Redis-cached fleet positions so the Location column shows current
@@ -475,6 +492,7 @@ export default function Trucks() {
         oilChangeInterval:  form.oilChangeInterval  ? parseInt(form.oilChangeInterval)  : null,
         pmServiceInterval:  form.pmServiceInterval  ? parseInt(form.pmServiceInterval)  : null,
         status:             parseInt(form.status),
+        assignedTrailer:    form.assignedTrailerId  ? parseInt(form.assignedTrailerId)  : null,
       };
       if (drawerMode === "add") {
         await apiCreateTruck(payload);
@@ -608,7 +626,7 @@ export default function Trucks() {
                         {/* Truck: number bold, make/model/year below */}
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-primary font-semibold">#{t.truck_number ?? `#${t.id}`}</span>
+                            <span className="text-xs font-mono text-primary font-semibold">{t.truck_number ?? `#${t.id}`}</span>
                             <ImportedChip eldSource={t.eld_source} size="xs" />
                           </div>
                           {spec && <div className="text-[11px] text-muted-foreground mt-0.5">{spec}</div>}
@@ -708,6 +726,7 @@ export default function Trucks() {
         )}
         <TruckFormFields
           form={form} set={setField} errors={errors} onBlur={handleBlur} makes={makes} models={models} modelsLoading={modelsLoading}
+          trailers={trailers} currentTruckId={selected?.id ?? null}
           exteriorImage={drawerMode === "edit" && selected ? {
             imageUrl: documentUrl(imagesHost, "trucks", exteriorHash, "full"),
             busy:     imageBusy,

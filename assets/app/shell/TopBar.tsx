@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
-import { Search, Filter, Calendar, ChevronDown, Bell, LogOut, User as UserIcon } from "lucide-react";
+import { ChevronDown, LogOut, User as UserIcon } from "lucide-react";
 import { navItems } from "../lib/nav";
-import { Btn } from "../lib/ui";
 import ThemeToggle from "./ThemeToggle";
 import { useAuth } from "../lib/auth";
 
@@ -63,33 +62,7 @@ export default function TopBar() {
         <p className="text-xs font-mono text-muted-foreground mt-0.5">{sub}</p>
       </div>
       <div className="flex items-center gap-3">
-        <div className="relative">
-          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search vehicles, drivers or locations…"
-            className="bg-input-background text-foreground border border-border rounded pl-8 pr-3 py-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-60 font-mono"
-          />
-        </div>
-        <Btn variant="outline">
-          <Filter size={11} className="inline mr-1" />
-          Filters
-        </Btn>
-        <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground border border-border rounded px-2 py-1.5 cursor-pointer hover:border-white/20 transition-colors">
-          <Calendar size={11} />
-          <span>May 8, 2026</span>
-          <ChevronDown size={10} />
-        </div>
         <ThemeToggle />
-        <button className="relative text-muted-foreground hover:text-foreground p-1.5 rounded hover:bg-white/5 transition-colors">
-          <Bell size={15} />
-          <span
-            className="absolute top-0 right-0 w-3 h-3 rounded-full bg-red-500 text-white"
-            style={{ fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}
-          >
-            4
-          </span>
-        </button>
         <div ref={menuRef} className="relative">
           <button
             type="button"

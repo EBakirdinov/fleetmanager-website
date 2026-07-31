@@ -224,7 +224,7 @@ function DriverFormFields({
           <option value="">— Unassigned —</option>
           {trucks.map(t => {
             const spec = [t.make?.name, t.model?.name, t.year].filter(Boolean).join(" ");
-            const label = (t.truck_number ? `#${t.truck_number}`: null) ?? `#${t.id}`;
+            const label = t.truck_number ?? `#${t.id}`;
             return <option key={t.id} value={t.id}>{spec ? `${label} — ${spec}` : label}</option>;
           })}
         </Select>
