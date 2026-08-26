@@ -175,6 +175,7 @@ export interface TruckItem {
   vin?: string | null;
   plate_number?: string | null;
   plate_state?: string | null;
+  plate_expiration_date?: string | null;
   color?: string | null;
   bed_count?: number | null;
   cab_type?: string | null;
@@ -188,10 +189,13 @@ export interface TruckItem {
   current_mileage?: number | null;
   engine_hours?: number | null;
   fuel_capacity?: number | null;
-  inspection_interval?: number | null;
+  federal_inspection_interval?: number | null;
+  state_inspection_interval?: number | null;
   oil_change_interval?: number | null;
   pm_service_interval?: number | null;
-  last_inspection_date?: string | null;
+  tire_change_interval?: number | null;
+  federal_inspection_date?: string | null;
+  state_inspection_date?: string | null;
   current_location?: string | null;
   home_terminal?: string | null;
   assigned_driver?: { id: number; first_name: string; last_name: string; phone?: string | null } | null;
@@ -199,6 +203,8 @@ export interface TruckItem {
   eld_source?: string | null;
   external_id?: string | null;
   exterior_image_hash?: string | null;
+  federal_inspection_hash?: string | null;
+  state_inspection_hash?: string | null;
 }
 
 export interface TrailerItem {
@@ -211,6 +217,7 @@ export interface TrailerItem {
   year?: number | null;
   vin?: string | null;
   plate_number?: string | null;
+  plate_expiration_date?: string | null;
   color?: string | null;
   length?: number | null;
   width?: number | null;
@@ -235,11 +242,19 @@ export interface TrailerItem {
   hazmat_certified?: boolean;
   thermo_king_unit?: boolean;
   odometer?: number | null;
+  tire_change_interval?: number | null;
+  pm_service_interval?: number | null;
+  federal_inspection_interval?: number | null;
+  state_inspection_interval?: number | null;
+  federal_inspection_date?: string | null;
+  state_inspection_date?: string | null;
   home_location?: string | null;
   purchase_date?: string | null;
   /** Doctrine decimal comes across as a numeric string ("24500.00"). */
   purchase_price?: string | null;
   notes?: string | null;
+  federal_inspection_hash?: string | null;
+  state_inspection_hash?: string | null;
   assigned_truck?: { id: number; truck_number: string } | null;
 }
 
@@ -410,7 +425,7 @@ export async function apiDeleteDriverDocument(
  */
 export function documentUrl(
   imagesHost: string,
-  entity: "drivers" | "trucks",
+  entity: "drivers" | "trucks" | "trailers",
   hash: string | null | undefined,
   size: "60x60" | "200x200" | "400x400" | "full" = "200x200",
 ): string | null {
@@ -447,6 +462,55 @@ export async function apiUploadTruckImage(id: number, file: File): Promise<Truck
 
 export async function apiDeleteTruckImage(id: number): Promise<void> {
   await apiProxy<unknown>(`truck/${id}/image`, { method: "DELETE" });
+}
+
+// ─── Inspection documents (truck + trailer) ──────────────────────────────────
+
+export type InspectionType = "federal" | "state";
+
+export interface InspectionDocumentResult {
+  inspectionType: InspectionType;
+  hash: string | null;
+}
+
+async function postInspectionUpload(
+  entity: "truck" | "trailer",
+  id: number,
+  type: InspectionType,
+  file: File,
+): Promise<InspectionDocumentResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(`/api/proxy/${entity}/${id}/inspection?inspectionType=${encodeURIComponent(type)}`, {
+    method: "POST",
+    credentials: "include",
+    body: fd,
+  });
+  const raw = await res.text();
+  const body = raw ? JSON.parse(raw) : null;
+  if (!res.ok) {
+    const msg = (body && typeof body === "object" && "error" in body && typeof body.error === "string")
+      ? body.error
+      : `Upload failed (${res.status})`;
+    throw new ApiError(res.status, msg, body);
+  }
+  return body?.data as InspectionDocumentResult;
+}
+
+export function apiUploadTruckInspection(id: number, type: InspectionType, file: File): Promise<InspectionDocumentResult> {
+  return postInspectionUpload("truck", id, type, file);
+}
+
+export function apiDeleteTruckInspection(id: number, type: InspectionType): Promise<void> {
+  return apiProxy<unknown>(`truck/${id}/inspection?inspectionType=${encodeURIComponent(type)}`, { method: "DELETE" }).then(() => undefined);
+}
+
+export function apiUploadTrailerInspection(id: number, type: InspectionType, file: File): Promise<InspectionDocumentResult> {
+  return postInspectionUpload("trailer", id, type, file);
+}
+
+export function apiDeleteTrailerInspection(id: number, type: InspectionType): Promise<void> {
+  return apiProxy<unknown>(`trailer/${id}/inspection?inspectionType=${encodeURIComponent(type)}`, { method: "DELETE" }).then(() => undefined);
 }
 
 export interface MakeItem { id: number; name: string; }
@@ -570,6 +634,42 @@ export interface EldImportResult {
    * as assigned to each vehicle. Absent / 0 when nothing was auto-imported.
    */
   driversAutoImported?: number;
+  /**
+   * Trucks import also reconciles already-imported trucks: if the driver
+   * Quantum reports on a known truck has changed, the previous ELD-sourced
+   * driver is unassigned and the new one is attached. Counts trucks touched
+   * that way. Absent / 0 for the drivers import endpoint.
+   */
+  driversReassigned?: number;
+  /**
+   * Already-imported trucks whose ELD-managed fields (plate, year, make/model,
+   * mileage, truck number) were refreshed to match Quantum's current state.
+   * Only meaningful on the trucks import endpoint.
+   */
+  trucksRefreshed?: number;
+  /**
+   * Already-imported drivers whose ELD-managed fields (name, license state /
+   * type / expiry, email, phone) were refreshed to match Quantum's state.
+   * Applies to both endpoints.
+   */
+  driversRefreshed?: number;
+  /**
+   * ELD-imported trucks that were present in a prior sync but missing from
+   * the current Quantum roster — soft-deactivated (status → inactive) rather
+   * than deleted so history stays intact. Only meaningful on trucks import.
+   */
+  trucksInactivated?: number;
+  /**
+   * ELD-imported drivers missing from the current Quantum roster — flipped
+   * to `terminated`. Only meaningful on drivers import.
+   */
+  driversTerminated?: number;
+  /**
+   * True when Quantum's paginated roster hit our safety cap and we can't
+   * tell whether we saw the whole list. The removal / termination pass is
+   * skipped in that case to avoid falsely marking real records inactive.
+   */
+  rosterIncomplete?: boolean;
   errors:   Array<{ externalId: string; reason: string }>;
 }
 

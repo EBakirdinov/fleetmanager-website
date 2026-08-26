@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useTheme } from "next-themes";
-import { MapPin, Plug } from "lucide-react";
+import { MapPin, Plug, Search, Truck, ArrowRight } from "lucide-react";
 import { Btn } from "../lib/ui";
 import { useAuth } from "../lib/auth";
-import { apiGetIntegrationConfig, apiGetFleetLocations, ApiError, type TruckLocation } from "../lib/api";
+import { apiGetIntegrationConfig, apiGetFleetLocations, apiListTrucks, ApiError, type TruckLocation, type TruckItem } from "../lib/api";
 
 interface GoogleMapsConfig {
   apiKey: string;
@@ -108,24 +108,13 @@ function loadGoogleMapsScript(apiKey: string): Promise<void> {
   return mapsScriptPromise;
 }
 
-function timeAgo(iso: string | null): string {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const diff = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (diff < 60)    return `${diff}s ago`;
-  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
 // ─── Map component with live markers ─────────────────────────────────────────
 
 /**
  * Minimal typing for the bits of the Google Maps API we touch. Full types would
  * mean pulling `@types/google.maps` — overkill for this surface.
  */
-type GMap     = { setCenter: (c: { lat: number; lng: number }) => void; setZoom: (z: number) => void; setOptions: (opts: object) => void };
+type GMap     = { setCenter: (c: { lat: number; lng: number }) => void; setZoom: (z: number) => void; setOptions: (opts: object) => void; setMapTypeId: (id: string) => void };
 type GLatLng  = { lat: () => number; lng: () => number };
 type GPoint      = { x: number; y: number };
 type GProjection = { fromLatLngToDivPixel: (ll: GLatLng) => GPoint | null };
@@ -150,82 +139,112 @@ interface GoogleNamespace {
     Map:          new (el: HTMLElement, opts: object) => GMap;
     LatLng:       new (lat: number, lng: number) => GLatLng;
     OverlayView:  GOverlayCtor;
-    ControlPosition: Record<string, number>;
   };
 }
 
 // ─── Per-truck color + overlay factory ───────────────────────────────────────
 
-/** Injects the pulsing-marker CSS keyframes once per document. */
+/** Inline truck SVG rendered inside every marker pin. Lucide `Truck` glyph. */
+const TRUCK_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>`;
+
+/**
+ * Injects the truck-marker CSS once per document. Each marker is a flex row:
+ * a colored circular pin (truck icon inside) at the geographic anchor, and a
+ * white label card to its right showing the truck number.
+ */
 function ensureTruckOverlayStyles(): void {
   if (typeof document === "undefined") return;
   if (document.getElementById("truck-overlay-styles")) return;
   const style = document.createElement("style");
   style.id = "truck-overlay-styles";
   style.textContent = `
-    .truck-overlay { position: absolute; transform: translate(-50%, -50%); pointer-events: none; width: 16px; height: 16px; }
-    .truck-overlay-dot {
-      position: absolute; inset: 0;
-      border-radius: 50%;
-      border: 2px solid rgba(15, 25, 35, 0.9);
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-      z-index: 2;
-    }
-    .truck-overlay-pulse {
-      position: absolute; inset: 0;
-      border-radius: 50%;
-      animation: truck-overlay-pulse 2.4s ease-out infinite;
+    .truck-overlay {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      /* Pin (32x32) is the first child — shifting the container 16px in each
+         direction places the pin's center exactly on the geo anchor. */
+      transform: translate(-16px, -16px);
+      pointer-events: none;
       z-index: 1;
-      opacity: 0;
     }
-    @keyframes truck-overlay-pulse {
-      0%   { transform: scale(1);   opacity: 0.6; }
-      100% { transform: scale(3.6); opacity: 0;   }
+    .truck-overlay-pin {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.95);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      flex-shrink: 0;
+    }
+    .truck-overlay-sign {
+      background: rgba(255, 255, 255, 0.95);
+      color: #0f1923;
+      border-radius: 6px;
+      padding: 3px 7px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+      white-space: nowrap;
     }
   `;
   document.head.appendChild(style);
 }
 
 /**
- * Custom map marker: a colored dot with an outward-pulsing ring. Built on
- * OverlayView so we can use CSS animation — Google Maps native Marker /
- * Symbol don't support keyframe animations.
+ * Custom map marker: a colored circular pin containing a truck icon, plus a
+ * white "sign" label to the right with the truck number. Built on OverlayView
+ * so we can compose real HTML + SVG — Google's native Marker only supports
+ * static images.
  */
-interface PulsingOverlay extends GOverlayInstance {
+interface TruckOverlay extends GOverlayInstance {
   setPosition(latLng: GLatLng): void;
   getPosition(): GLatLng;
   setColor(color: string): void;
+  setLabel(label: string): void;
 }
 
-function createPulsingOverlayClass(google: GoogleNamespace): new (position: GLatLng, color: string) => PulsingOverlay {
-  return class extends google.maps.OverlayView implements PulsingOverlay {
+function createTruckOverlayClass(google: GoogleNamespace): new (position: GLatLng, color: string, label: string) => TruckOverlay {
+  return class extends google.maps.OverlayView implements TruckOverlay {
     private position: GLatLng;
     private color: string;
+    private label: string;
     private div: HTMLDivElement | null = null;
-    private dotEl: HTMLDivElement | null = null;
-    private pulseEl: HTMLDivElement | null = null;
+    private pinEl: HTMLDivElement | null = null;
+    private signEl: HTMLDivElement | null = null;
 
-    constructor(position: GLatLng, color: string) {
+    constructor(position: GLatLng, color: string, label: string) {
       super();
       this.position = position;
       this.color    = color;
+      this.label    = label;
     }
 
     onAdd() {
       const div = document.createElement("div");
       div.className = "truck-overlay";
-      const pulse = document.createElement("div");
-      pulse.className = "truck-overlay-pulse";
-      pulse.style.background = this.color;
-      const dot = document.createElement("div");
-      dot.className = "truck-overlay-dot";
-      dot.style.background = this.color;
-      div.appendChild(pulse);
-      div.appendChild(dot);
+
+      const pin = document.createElement("div");
+      pin.className = "truck-overlay-pin";
+      pin.style.background = this.color;
+      pin.innerHTML = TRUCK_ICON_SVG;
+
+      const sign = document.createElement("div");
+      sign.className = "truck-overlay-sign";
+      sign.textContent = this.label;
+
+      div.appendChild(pin);
+      div.appendChild(sign);
 
       this.div = div;
-      this.dotEl = dot;
-      this.pulseEl = pulse;
+      this.pinEl = pin;
+      this.signEl = sign;
       this.getPanes().overlayMouseTarget.appendChild(div);
     }
 
@@ -243,7 +262,7 @@ function createPulsingOverlayClass(google: GoogleNamespace): new (position: GLat
       if (this.div && this.div.parentNode) {
         this.div.parentNode.removeChild(this.div);
       }
-      this.div = this.dotEl = this.pulseEl = null;
+      this.div = this.pinEl = this.signEl = null;
     }
 
     setPosition(latLng: GLatLng) {
@@ -257,8 +276,12 @@ function createPulsingOverlayClass(google: GoogleNamespace): new (position: GLat
 
     setColor(color: string) {
       this.color = color;
-      if (this.dotEl)   this.dotEl.style.background   = color;
-      if (this.pulseEl) this.pulseEl.style.background = color;
+      if (this.pinEl) this.pinEl.style.background = color;
+    }
+
+    setLabel(label: string) {
+      this.label = label;
+      if (this.signEl) this.signEl.textContent = label;
     }
   };
 }
@@ -272,9 +295,10 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [mapType, setMapType] = useState<"roadmap" | "hybrid">("roadmap");
   const mapRef        = useRef<GMap | null>(null);
-  const overlaysRef   = useRef<Map<number, PulsingOverlay>>(new Map());
-  const overlayCtorRef = useRef<ReturnType<typeof createPulsingOverlayClass> | null>(null);
+  const overlaysRef   = useRef<Map<number, TruckOverlay>>(new Map());
+  const overlayCtorRef = useRef<ReturnType<typeof createTruckOverlayClass> | null>(null);
   const onMapReadyRef = useRef(onMapReady);
   onMapReadyRef.current = onMapReady;
 
@@ -291,18 +315,18 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
         const map = new google.maps.Map(containerRef.current, {
           center: USA_CENTER,
           zoom: USA_ZOOM,
-          disableDefaultUI: false,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          zoomControlOptions:  { position: google.maps.ControlPosition.LEFT_BOTTOM },
-          panControlOptions:   { position: google.maps.ControlPosition.LEFT_BOTTOM },
+          // Strip every default control (zoom, pan, streetview, fullscreen,
+          // maptype, rotate). The Google logo + "Terms" attribution stay —
+          // Google Maps ToS forbids hiding those.
+          disableDefaultUI: true,
+          keyboardShortcuts: false,
+          clickableIcons: false,
           styles: isDark ? DARK_MAP_STYLE : LIGHT_MAP_STYLE,
         });
         mapRef.current = map;
         // OverlayView subclasses can only be defined after the Maps script
         // has provided the base class.
-        overlayCtorRef.current = createPulsingOverlayClass(google);
+        overlayCtorRef.current = createTruckOverlayClass(google);
         ensureTruckOverlayStyles();
         onMapReadyRef.current?.(map);
         // Flip state so the marker-sync effect re-runs with `positions` that
@@ -322,6 +346,12 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
     mapRef.current.setOptions({ styles: isDark ? DARK_MAP_STYLE : LIGHT_MAP_STYLE });
   }, [isDark]);
 
+  // Push the map-type toggle down into the Maps instance.
+  useEffect(() => {
+    if (!mapRef.current) return;
+    mapRef.current.setMapTypeId(mapType);
+  }, [mapType]);
+
   // Sync markers with the latest positions whenever the array changes OR
   // whenever the map finishes booting (which may happen after positions have
   // already arrived from the poll).
@@ -338,13 +368,15 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
       seen.add(t.truckId);
       const latLng = new google.maps.LatLng(t.lat, t.lng);
       const color  = t.color;
+      const label  = t.truckNumber ?? `#${t.truckId}`;
 
       const existing = overlaysRef.current.get(t.truckId);
       if (existing) {
         existing.setPosition(latLng);
         existing.setColor(color);
+        existing.setLabel(label);
       } else {
-        const overlay = new OverlayCtor(latLng, color);
+        const overlay = new OverlayCtor(latLng, color, label);
         overlay.setMap(map);
         overlaysRef.current.set(t.truckId, overlay);
       }
@@ -373,64 +405,198 @@ function GoogleMap({ apiKey, positions, onMapReady }: {
     );
   }
 
-  return <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden bg-muted" />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden bg-muted" />
+      <div className="absolute top-3 right-3 flex bg-card/90 backdrop-blur border border-border rounded-md p-0.5 shadow-lg">
+        {(["roadmap", "hybrid"] as const).map(t => {
+          const active = mapType === t;
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setMapType(t)}
+              className={
+                "text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 rounded-sm transition-colors " +
+                (active
+                  ? "bg-foreground/10 text-foreground"
+                  : "text-muted-foreground hover:text-foreground")
+              }
+            >
+              {t === "roadmap" ? "Map" : "Satellite"}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // ─── Aside: right-column truck list ──────────────────────────────────────────
 
-function TruckListAside({ positions, loading, error, onFocus }: {
+/**
+ * Deterministic per-truck color that mirrors the backend's `colorForTruck()`
+ * in LocationsSyncer.php — so a truck without a live position still gets the
+ * same color it would get once its GPS starts reporting.
+ */
+function colorForTruck(id: number): string {
+  const hue = (id * 137) % 360;
+  return `hsl(${hue}, 75%, 55%)`;
+}
+
+function TruckListAside({ trucks, positions, loading, error, onFocus }: {
+  trucks: TruckItem[];
   positions: TruckLocation[];
   loading: boolean;
   error: string | null;
   onFocus: (t: TruckLocation) => void;
 }) {
-  const sorted = useMemo(() => {
-    return [...positions].sort((a, b) => (a.truckNumber ?? "").localeCompare(b.truckNumber ?? ""));
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+
+  const posByTruckId = useMemo(() => {
+    const m = new Map<number, TruckLocation>();
+    positions.forEach(p => m.set(p.truckId, p));
+    return m;
   }, [positions]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = trucks;
+    if (q) {
+      list = list.filter(t => {
+        const driver = t.assigned_driver
+          ? `${t.assigned_driver.first_name} ${t.assigned_driver.last_name}`.toLowerCase()
+          : "";
+        const pos = posByTruckId.get(t.id);
+        return (
+          (t.truck_number ?? "").toLowerCase().includes(q) ||
+          driver.includes(q) ||
+          (pos?.location ?? "").toLowerCase().includes(q) ||
+          (pos?.state    ?? "").toLowerCase().includes(q)
+        );
+      });
+    }
+    return [...list].sort((a, b) =>
+      (a.truck_number ?? "").localeCompare(b.truck_number ?? "")
+    );
+  }, [trucks, search, posByTruckId]);
 
   return (
     <div className="bg-card border border-border rounded-lg flex flex-col min-h-0">
+      {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border flex-shrink-0">
-        <span className="text-xs font-mono text-muted-foreground tracking-widest uppercase">Live Fleet</span>
-        <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{sorted.length}</span>
+        <h2 className="text-sm font-semibold text-foreground">
+          All Trucks{" "}
+          <span className="text-muted-foreground font-mono font-normal">({trucks.length})</span>
+        </h2>
       </div>
-      <div className="flex-1 overflow-y-auto">
+
+      {/* Search */}
+      <div className="px-3 py-2 border-b border-border flex-shrink-0">
+        <div className="relative">
+          <Search
+            size={11}
+            className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+          />
+          <input
+            type="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search trucks..."
+            className="w-full pl-7 pr-2 py-1.5 bg-muted/50 border border-border rounded text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground/30"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-auto">
         {loading && (
           <div className="px-3 py-6 text-center text-xs font-mono text-muted-foreground">Loading…</div>
         )}
         {error && (
           <div className="px-3 py-6 text-center text-xs font-mono text-red-400">{error}</div>
         )}
-        {!loading && !error && sorted.length === 0 && (
+        {!loading && !error && filtered.length === 0 && (
           <div className="px-3 py-6 text-center text-xs font-mono text-muted-foreground">
-            No trucks are reporting locations right now.
+            {trucks.length === 0 ? "No trucks yet." : "No trucks match."}
           </div>
         )}
-        {sorted.map(t => (
-          <button
-            key={t.truckId}
-            onClick={() => onFocus(t)}
-            className="w-full text-left px-3 py-2 border-b border-border/50 hover:bg-white/[0.03] transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <span
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-black/40"
-                style={{ background: t.color, boxShadow: `0 0 6px ${t.color}66` }}
-                aria-hidden="true"
-              />
-              <span className="text-xs font-mono font-semibold truncate" style={{ color: t.color }}>
-                {t.truckNumber ?? `#${t.truckId}`}
-              </span>
-              <span className="text-[10px] font-mono text-muted-foreground ml-auto">{timeAgo(t.time)}</span>
-            </div>
-            <div className="text-xs text-foreground truncate mt-0.5">{t.driverName ?? "Unassigned"}</div>
-            {(t.location || t.state) && (
-              <div className="text-[11px] font-mono text-muted-foreground truncate">
-                {[t.location, t.state].filter(Boolean).join(", ")}
-              </div>
-            )}
-          </button>
-        ))}
+        {!loading && !error && filtered.length > 0 && (
+          <table className="w-full text-[11px] font-mono border-separate border-spacing-0">
+            <thead className="sticky top-0 z-10 bg-card">
+              <tr className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                <th className="text-left font-normal px-2 py-1.5 border-b border-border">Truck</th>
+                <th className="text-left font-normal px-2 py-1.5 border-b border-border">Driver</th>
+                <th className="text-left font-normal px-2 py-1.5 border-b border-border">Location</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(t => {
+                const pos    = posByTruckId.get(t.id);
+                const color  = pos?.color ?? colorForTruck(t.id);
+                const hasDriver = !!t.assigned_driver;
+                const driver = hasDriver
+                  ? `${t.assigned_driver!.first_name} ${t.assigned_driver!.last_name}`
+                  : "—";
+                const focusable = !!pos;
+                return (
+                  <tr
+                    key={t.id}
+                    onClick={() => { if (pos) onFocus(pos); }}
+                    className={
+                      "border-b border-border/50 " +
+                      (focusable ? "cursor-pointer hover:bg-white/[0.03]" : "")
+                    }
+                  >
+                    <td className="px-2 py-1.5 border-b border-border/50">
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
+                          style={{ background: color, opacity: focusable ? 1 : 0.5 }}
+                          aria-hidden="true"
+                        >
+                          <Truck size={10} className="text-white" />
+                        </div>
+                        <span
+                          className="font-semibold whitespace-nowrap"
+                          style={{ color, opacity: focusable ? 1 : 0.5 }}
+                        >
+                          {t.truck_number ?? `#${t.id}`}
+                        </span>
+                      </div>
+                    </td>
+                    <td
+                      className={
+                        "px-2 py-1.5 border-b border-border/50 max-w-[110px] truncate " +
+                        (hasDriver ? "text-foreground" : "text-muted-foreground")
+                      }
+                    >
+                      {driver}
+                    </td>
+                    <td className="px-2 py-1.5 border-b border-border/50 text-muted-foreground max-w-[110px] truncate">
+                      {pos && (pos.location || pos.state)
+                        ? [pos.location, pos.state].filter(Boolean).join(", ")
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-3 py-2 border-t border-border flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => navigate("/trucks")}
+          className="w-full flex items-center justify-center gap-1 text-xs font-mono text-foreground/70 hover:text-foreground transition-colors"
+        >
+          View All Trucks
+          <ArrowRight size={11} />
+        </button>
       </div>
     </div>
   );
@@ -475,6 +641,9 @@ export default function Dashboard() {
   const [positions,    setPositions]    = useState<TruckLocation[]>([]);
   const [posLoading,   setPosLoading]   = useState(true);
   const [posError,     setPosError]     = useState<string | null>(null);
+  const [trucks,       setTrucks]       = useState<TruckItem[]>([]);
+  const [trucksLoading, setTrucksLoading] = useState(true);
+  const [trucksError,   setTrucksError]   = useState<string | null>(null);
   const mapInstanceRef = useRef<GMap | null>(null);
 
   // Google Maps API key check.
@@ -495,6 +664,19 @@ export default function Dashboard() {
         setStatus("error");
         setErrorMsg(e instanceof ApiError ? e.message : "Failed to check Google Maps status");
       });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Fetch the full truck list once — used to render every truck in the aside,
+  // whether it's currently reporting a location or not.
+  useEffect(() => {
+    let cancelled = false;
+    apiListTrucks()
+      .then(list => { if (!cancelled) { setTrucks(list); setTrucksError(null); } })
+      .catch(e => {
+        if (!cancelled) setTrucksError(e instanceof ApiError ? e.message : "Failed to load trucks");
+      })
+      .finally(() => { if (!cancelled) setTrucksLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -557,8 +739,14 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Right column — live truck list */}
-        <TruckListAside positions={positions} loading={posLoading} error={posError} onFocus={focusTruck} />
+        {/* Right column — full truck list, merged with live locations */}
+        <TruckListAside
+          trucks={trucks}
+          positions={positions}
+          loading={trucksLoading}
+          error={trucksError ?? posError}
+          onFocus={focusTruck}
+        />
 
         {/* Second row placeholders — three across */}
         <div className="bg-card border border-border rounded-lg" />

@@ -17,7 +17,7 @@ import {
 import { useRefData } from "../lib/data";
 import {
   validateRequired, validateEmail, validatePhone, validateSSN, validateZip,
-  validateFutureDate, validatePositiveInt, combineValidators,
+  validateFutureDate, validatePositiveInt, combineValidators, formatDate,
 } from "../lib/validators";
 import { maskPhone, maskSSN, maskZip } from "../lib/masks";
 import { ImportedChip } from "../components/ImportedChip";
@@ -314,10 +314,10 @@ const DOCUMENT_SLOTS: { type: DriverDocumentType; label: string; hint?: string }
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
 const DRIVER_STATUS_LABEL: Record<string, string> = {
-  active: "Active", off_duty: "Off Duty", suspended: "Suspended",
+  active: "Active", off_duty: "Off Duty", suspended: "Suspended", terminated: "Terminated",
 };
 const DRIVER_STATUS_COLOR: Record<string, string> = {
-  active: "#10b981", off_duty: "#f59e0b", suspended: "#ef4444",
+  active: "#10b981", off_duty: "#f59e0b", suspended: "#ef4444", terminated: "#6b7e96",
 };
 
 // ─── Expiry helpers ──────────────────────────────────────────────────────────
@@ -704,11 +704,11 @@ export default function Drivers() {
                         {/* Medical Cert.: issue date on top, expiration below */}
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           {d.medical_cert_issue_date
-                            ? <div className="text-xs font-mono text-foreground">{d.medical_cert_issue_date}</div>
+                            ? <div className="text-xs font-mono text-foreground">{formatDate(d.medical_cert_issue_date)}</div>
                             : <div className="text-xs text-muted-foreground">—</div>}
                           {d.medical_cert_expiration_date && (
                             <div className={`text-[11px] font-mono mt-0.5 ${medDays != null && medDays < 90 ? expiryClass(medDays) : "text-muted-foreground"}`}>
-                              Exp {d.medical_cert_expiration_date}
+                              Exp {formatDate(d.medical_cert_expiration_date)}
                             </div>
                           )}
                         </td>

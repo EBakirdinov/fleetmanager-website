@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ChangeEvent, ElementType, ReactNode } from "react";
-import { Check, FileUp, MoreVertical, Save, Trash2, X } from "lucide-react";
+import { Calendar, Check, FileUp, MoreVertical, Save, Trash2, X } from "lucide-react";
 
 export function KpiCard({ label, value, sub, icon: Icon, accent, active, onClick }: {
   label: string;
@@ -83,11 +84,13 @@ export function ComingSoon({ title, icon: Icon }: { title: string; icon: Element
   );
 }
 
-export function SlideDrawer({ open, onClose, title, badge, children, onSave, saving, onDelete, deleting }: {
+export function SlideDrawer({ open, onClose, title, badge, titleExtra, children, onSave, saving, onDelete, deleting }: {
   open: boolean;
   onClose: () => void;
   title: string;
   badge?: string;
+  /** Extra slot after the badge in the header (e.g. an ELD-source chip). */
+  titleExtra?: ReactNode;
   children: ReactNode;
   onSave?: () => void;
   saving?: boolean;
@@ -107,13 +110,14 @@ export function SlideDrawer({ open, onClose, title, badge, children, onSave, sav
         style={{ boxShadow: open ? "-8px 0 32px rgba(0,0,0,0.35)" : "none" }}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
             <p className="text-base font-semibold text-foreground">{title}</p>
             {badge && (
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary tracking-wider">
                 {badge}
               </span>
             )}
+            {titleExtra}
           </div>
           <button onClick={onClose} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             <X size={14} />
@@ -160,7 +164,7 @@ export function DrawerSection({ title, children }: { title: string; children: Re
   );
 }
 
-export function DrawerField({ label, value, type = "text", hint, readOnly, mono, maxLength, required, onChange, onBlur, error }: {
+export function DrawerField({ label, value, type = "text", hint, readOnly, mono, maxLength, max, min, required, onChange, onBlur, error }: {
   label: string;
   value: string;
   type?: string;
@@ -168,6 +172,8 @@ export function DrawerField({ label, value, type = "text", hint, readOnly, mono,
   readOnly?: boolean;
   mono?: boolean;
   maxLength?: number;
+  max?: string;
+  min?: string;
   required?: boolean;
   onChange?: (v: string) => void;
   onBlur?: () => void;
@@ -181,18 +187,135 @@ export function DrawerField({ label, value, type = "text", hint, readOnly, mono,
       <label className="text-xs font-mono text-muted-foreground tracking-wider uppercase">
         {label}{required && <span className="text-red-400 ml-1">*</span>}
       </label>
-      <input
-        type={type}
-        value={value}
-        readOnly={readOnly}
-        maxLength={maxLength}
-        onChange={e => onChange?.(e.target.value)}
-        onBlur={onBlur}
-        className={`bg-input-background text-foreground border ${borderClass} rounded px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 transition-colors ${mono ? "font-mono" : ""} ${readOnly ? "opacity-50 cursor-not-allowed select-all" : ""}`}
-      />
+      {type === "date"
+        ? (
+          <MaskedDateInput
+            value={value}
+            max={max}
+            min={min}
+            readOnly={readOnly}
+            onChange={v => onChange?.(v)}
+            onBlur={onBlur}
+            borderClass={borderClass}
+          />
+        )
+        : (
+          <input
+            type={type}
+            value={value}
+            readOnly={readOnly}
+            maxLength={maxLength}
+            max={max}
+            min={min}
+            onChange={e => onChange?.(e.target.value)}
+            onBlur={onBlur}
+            className={`bg-input-background text-foreground border ${borderClass} rounded px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 transition-colors ${mono ? "font-mono" : ""} ${readOnly ? "opacity-50 cursor-not-allowed select-all" : ""}`}
+          />
+        )
+      }
       {error
         ? <p className="text-xs font-mono text-red-400">{error}</p>
         : hint && <p className="text-xs font-mono text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+// Convert stored ISO ("YYYY-MM-DD") to display ("MM/DD/YYYY").
+function isoToDisplay(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : "";
+}
+
+// Parse display ("MM/DD/YYYY") back to ISO. Returns "" if invalid.
+function displayToIso(display: string): string {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(display);
+  if (!m) return "";
+  const mm = parseInt(m[1], 10), dd = parseInt(m[2], 10), yyyy = parseInt(m[3], 10);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900 || yyyy > 2100) return "";
+  const d = new Date(yyyy, mm - 1, dd);
+  if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return "";
+  return `${m[3]}-${m[1]}-${m[2]}`;
+}
+
+// Insert slashes as the user types so the value always reads MM/DD/YYYY.
+function autoSlash(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+/**
+ * Date input that always renders MM/DD/YYYY regardless of browser/OS locale.
+ * Stores its value as ISO ("YYYY-MM-DD") for API consumption. The visible
+ * field is our masked text input; a native <input type="date"> is overlaid
+ * on the calendar-icon area (opacity 0) so clicking the icon opens the OS
+ * date picker anchored at that location and typing still goes into the
+ * masked text field.
+ */
+function MaskedDateInput({ value, max, min, readOnly, onChange, onBlur, borderClass }: {
+  value: string;
+  max?: string;
+  min?: string;
+  readOnly?: boolean;
+  onChange: (iso: string) => void;
+  onBlur?: () => void;
+  borderClass: string;
+}) {
+  const [text, setText] = useState(() => isoToDisplay(value));
+
+  useEffect(() => { setText(isoToDisplay(value)); }, [value]);
+
+  function isoInRange(iso: string): boolean {
+    if (max && iso > max) return false;
+    if (min && iso < min) return false;
+    return true;
+  }
+
+  function handleText(raw: string) {
+    const masked = autoSlash(raw);
+    setText(masked);
+    if (!masked) { onChange(""); return; }
+    const iso = displayToIso(masked);
+    // Only commit fully-typed, in-range dates. Partial or out-of-range
+    // typing lingers in the text field until blur snaps it back.
+    if (iso && isoInRange(iso)) onChange(iso);
+  }
+
+  function handleBlur() {
+    // Reset display to the canonical form of the committed value so a
+    // half-typed or out-of-range entry doesn't linger in the field.
+    setText(isoToDisplay(value));
+    onBlur?.();
+  }
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        inputMode="numeric"
+        value={text}
+        placeholder="MM/DD/YYYY"
+        readOnly={readOnly}
+        maxLength={10}
+        onChange={e => handleText(e.target.value)}
+        onBlur={handleBlur}
+        className={`bg-input-background text-foreground border ${borderClass} rounded pl-3 pr-9 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 transition-colors font-mono w-full ${readOnly ? "opacity-50 cursor-not-allowed" : ""}`}
+      />
+      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+        <Calendar size={14} />
+      </span>
+      <input
+        type="date"
+        value={value}
+        max={max}
+        min={min}
+        disabled={readOnly}
+        onChange={e => onChange(e.target.value)}
+        aria-label="Pick date"
+        tabIndex={-1}
+        className="absolute right-0 top-0 h-full w-9 opacity-0 cursor-pointer disabled:cursor-not-allowed"
+      />
     </div>
   );
 }
@@ -387,13 +510,49 @@ export function ActionsMenu({ items, align = "right" }: {
   align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; placement: "bottom" | "top" } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const MENU_WIDTH = 140;
+    const MENU_HEIGHT_ESTIMATE = items.length * 28 + 8;
+    const GAP = 4;
+
+    function updatePosition() {
+      if (!buttonRef.current) return;
+      // The app applies CSS `zoom` on <html> (see ZoomControls). getBoundingClientRect
+      // returns already-scaled visual coordinates, but a fixed-positioned portal inside
+      // <body> is itself scaled by the same zoom — so raw rect values would be scaled twice.
+      // Divide by the current zoom so the fixed coords land at the button's visual position.
+      const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const menuHeightVisual = MENU_HEIGHT_ESTIMATE * zoom;
+      const menuWidthVisual = MENU_WIDTH * zoom;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const placement: "bottom" | "top" = spaceBelow < menuHeightVisual + GAP && rect.top > menuHeightVisual + GAP ? "top" : "bottom";
+      const topVisual = placement === "bottom" ? rect.bottom + GAP : rect.top - GAP - menuHeightVisual;
+      const leftVisual = align === "right" ? rect.right - menuWidthVisual : rect.left;
+      setPos({ top: topVisual / zoom, left: leftVisual / zoom, placement });
+    }
+
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, align, items.length]);
 
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
-      if (!rootRef.current) return;
-      if (!rootRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -407,8 +566,9 @@ export function ActionsMenu({ items, align = "right" }: {
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative inline-block">
+    <div className="relative inline-block">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen(o => !o)}
         title="Actions"
@@ -416,10 +576,12 @@ export function ActionsMenu({ items, align = "right" }: {
       >
         <MoreVertical size={14} />
       </button>
-      {open && (
+      {open && pos && createPortal(
         <div
+          ref={menuRef}
           role="menu"
-          className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full mt-1 min-w-[140px] bg-card border border-border rounded-md shadow-lg z-30 py-1`}
+          style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: 140 }}
+          className="bg-card border border-border rounded-md shadow-lg z-50 py-1"
         >
           {items.map(item => {
             const Icon = item.icon;
@@ -440,7 +602,8 @@ export function ActionsMenu({ items, align = "right" }: {
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -4,13 +4,14 @@ import { Container, CheckCircle, AlertCircle, Pencil, Plus, Trash2 } from "lucid
 import {
   KpiCard, Btn, SlideDrawer, DrawerSection, DrawerFieldRow,
   DrawerField as Field, DrawerSelect as Select, DrawerFieldRow as FieldRow, ToggleButton as Toggle,
-  DrawerTextarea as Textarea, ActionsMenu,
+  DrawerTextarea as Textarea, ActionsMenu, DrawerFileField,
 } from "../lib/ui";
 import {
   apiListTrailers, apiCreateTrailer, apiUpdateTrailer, apiDeleteTrailer, ApiError, type TrailerItem,
   apiListTrailerMakes, apiListTrailerModels, type MakeItem, type ModelItem,
+  apiUploadTrailerInspection, apiDeleteTrailerInspection, documentUrl, type InspectionType,
 } from "../lib/api";
-import { validateVIN, validateYear, validatePositiveInt, validateRequired, combineValidators } from "../lib/validators";
+import { validateVIN, validateYear, validatePositiveInt, validateRequired, combineValidators, todayIsoDate } from "../lib/validators";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -26,6 +27,7 @@ interface TrailerForm {
   modelId: string;
   vin: string;
   plateNumber: string;
+  plateExpirationDate: string;
   color: string;
   length: string;
   width: string;
@@ -51,6 +53,12 @@ interface TrailerForm {
   hazmatCertified: boolean;
   thermoKingUnit: boolean;
   odometer: string;
+  tireChangeInterval: string;
+  pmServiceInterval: string;
+  federalInspectionInterval: string;
+  federalInspectionDate: string;
+  stateInspectionInterval: string;
+  stateInspectionDate: string;
   homeLocation: string;
   purchaseDate: string;
   purchasePrice: string;
@@ -58,14 +66,17 @@ interface TrailerForm {
 }
 
 const emptyForm = (): TrailerForm => ({
-  trailerNumber: "", type: "", year: "", makeId: "", modelId: "", vin: "", plateNumber: "", color: "",
+  trailerNumber: "", type: "", year: "", makeId: "", modelId: "", vin: "", plateNumber: "", plateExpirationDate: "", color: "",
   length: "", width: "", height: "", axleCount: "", tireSize: "", tireCount: "",
   gvwr: "", tareWeight: "", payloadCapacity: "",
   doorType: "", roofType: "", floorType: "", sideMaterial: "", frontMaterial: "",
   status: "1",
   airRideSuspension: false, slidingTandem: false, ventilation: false, absBrakes: false,
   eTrack: false, liftgate: false, hazmatCertified: false, thermoKingUnit: false,
-  odometer: "", homeLocation: "", purchaseDate: "", purchasePrice: "", notes: "",
+  odometer: "", tireChangeInterval: "", pmServiceInterval: "",
+  federalInspectionInterval: "", federalInspectionDate: "",
+  stateInspectionInterval: "", stateInspectionDate: "",
+  homeLocation: "", purchaseDate: "", purchasePrice: "", notes: "",
 });
 
 function formFromItem(t: TrailerItem): TrailerForm {
@@ -76,7 +87,8 @@ function formFromItem(t: TrailerItem): TrailerForm {
     makeId:            t.make?.id?.toString()    ?? "",
     modelId:           t.model?.id?.toString()   ?? "",
     vin:               t.vin                     ?? "",
-    plateNumber:       t.plate_number            ?? "",
+    plateNumber:         t.plate_number          ?? "",
+    plateExpirationDate: t.plate_expiration_date ?? "",
     color:             t.color                   ?? "",
     length:            t.length?.toString()      ?? "",
     width:             t.width?.toString()       ?? "",
@@ -101,8 +113,14 @@ function formFromItem(t: TrailerItem): TrailerForm {
     liftgate:          t.liftgate                ?? false,
     hazmatCertified:   t.hazmat_certified        ?? false,
     thermoKingUnit:    t.thermo_king_unit        ?? false,
-    odometer:          t.odometer?.toString()    ?? "",
-    homeLocation:      t.home_location           ?? "",
+    odometer:                  t.odometer?.toString()                    ?? "",
+    tireChangeInterval:        t.tire_change_interval?.toString()        ?? "",
+    pmServiceInterval:         t.pm_service_interval?.toString()         ?? "",
+    federalInspectionInterval: t.federal_inspection_interval?.toString() ?? "",
+    federalInspectionDate:     t.federal_inspection_date                 ?? "",
+    stateInspectionInterval:   t.state_inspection_interval?.toString()   ?? "",
+    stateInspectionDate:       t.state_inspection_date                   ?? "",
+    homeLocation:              t.home_location                           ?? "",
     purchaseDate:      t.purchase_date           ?? "",
     purchasePrice:     t.purchase_price          ?? "",
     notes:             t.notes                   ?? "",
@@ -127,7 +145,11 @@ const TRAILER_VALIDATORS: Partial<Record<string, (v: string) => string | null>> 
   gvwr:            validatePositiveInt,
   tareWeight:      validatePositiveInt,
   payloadCapacity: validatePositiveInt,
-  odometer:        validatePositiveInt,
+  odometer:                  validatePositiveInt,
+  tireChangeInterval:        validatePositiveInt,
+  pmServiceInterval:         validatePositiveInt,
+  federalInspectionInterval: validatePositiveInt,
+  stateInspectionInterval:   validatePositiveInt,
 };
 
 function validateAllTrailer(form: TrailerForm): Record<string, string | null> {
@@ -147,12 +169,19 @@ function validateAllTrailer(form: TrailerForm): Record<string, string | null> {
 
 // ─── Trailer form component ──────────────────────────────────────────────────
 
-type TrailerStrField = "trailerNumber"|"type"|"year"|"makeId"|"modelId"|"vin"|"plateNumber"|"color"|"length"|"width"|"height"|"axleCount"|"tireSize"|"tireCount"|"gvwr"|"tareWeight"|"payloadCapacity"|"doorType"|"roofType"|"floorType"|"sideMaterial"|"frontMaterial"|"status"|"odometer"|"homeLocation"|"purchaseDate"|"purchasePrice"|"notes";
+type TrailerStrField = "trailerNumber"|"type"|"year"|"makeId"|"modelId"|"vin"|"plateNumber"|"plateExpirationDate"|"color"|"length"|"width"|"height"|"axleCount"|"tireSize"|"tireCount"|"gvwr"|"tareWeight"|"payloadCapacity"|"doorType"|"roofType"|"floorType"|"sideMaterial"|"frontMaterial"|"status"|"odometer"|"tireChangeInterval"|"pmServiceInterval"|"federalInspectionInterval"|"federalInspectionDate"|"stateInspectionInterval"|"stateInspectionDate"|"homeLocation"|"purchaseDate"|"purchasePrice"|"notes";
 
 type TrailerBoolField = "airRideSuspension"|"slidingTandem"|"ventilation"|"absBrakes"|"eTrack"|"liftgate"|"hazmatCertified"|"thermoKingUnit";
 
+type TrailerInspectionDocSlot = {
+  imageUrl: string | null;
+  busy:     boolean;
+  onUpload: (file: File) => void;
+  onDelete: () => void;
+};
+
 function TrailerFormFields({
-  form, set, setBool, errors, onBlur, makes, models, modelsLoading,
+  form, set, setBool, errors, onBlur, makes, models, modelsLoading, inspectionDocs,
 }: {
   form: TrailerForm;
   set: (k: TrailerStrField, v: string) => void;
@@ -162,6 +191,12 @@ function TrailerFormFields({
   makes: MakeItem[];
   models: ModelItem[];
   modelsLoading: boolean;
+  /** Federal / state inspection document slots. Rendered as their own section
+   *  after Maintenance Intervals. When omitted (add mode), the section is hidden. */
+  inspectionDocs?: {
+    federal: TrailerInspectionDocSlot;
+    state:   TrailerInspectionDocSlot;
+  };
 }) {
   const { data: refData } = useRefData();
   const trailerTypes = refData?.trailerTypes ?? ["Dry Van", "Reefer", "Flatbed", "Step Deck", "Lowboy", "Curtain Side", "Tanker"];
@@ -177,6 +212,7 @@ function TrailerFormFields({
     : modelsLoading
       ? "Loading…"
       : "— Select —";
+  const today = todayIsoDate();
 
   return (
     <>
@@ -203,6 +239,10 @@ function TrailerFormFields({
             {trailerTypes.map(v => <option key={v} value={v}>{v}</option>)}
           </Select>
           <Field label="Plate #" value={form.plateNumber} mono required onChange={v => set("plateNumber", v)} onBlur={() => onBlur("plateNumber")} error={errors.plateNumber} />
+        </DrawerFieldRow>
+        <DrawerFieldRow>
+          <Field label="Plate Expiration" value={form.plateExpirationDate} type="date" onChange={v => set("plateExpirationDate", v)} />
+          <div />
         </DrawerFieldRow>
       </DrawerSection>
 
@@ -287,6 +327,43 @@ function TrailerFormFields({
         </DrawerFieldRow>
         <Textarea label="Notes" value={form.notes} onChange={v => set("notes", v)} />
       </DrawerSection>
+
+      <DrawerSection title="Maintenance Intervals">
+        <DrawerFieldRow>
+          <Field label="Last Federal Inspection" value={form.federalInspectionDate} type="date" max={today} onChange={v => set("federalInspectionDate", v)} />
+          <Field label="Federal Interval (months)" value={form.federalInspectionInterval} type="number" mono onChange={v => set("federalInspectionInterval", v)} onBlur={() => onBlur("federalInspectionInterval")} error={errors.federalInspectionInterval} />
+        </DrawerFieldRow>
+        {inspectionDocs && (
+          <DrawerFileField
+            label="Federal Inspection Document"
+            hint="Photo or scan of the DOT annual inspection report"
+            accept="image/*"
+            imageUrl={inspectionDocs.federal.imageUrl}
+            busy={inspectionDocs.federal.busy}
+            onUpload={inspectionDocs.federal.onUpload}
+            onDelete={inspectionDocs.federal.onDelete}
+          />
+        )}
+        <DrawerFieldRow>
+          <Field label="Last State Inspection" value={form.stateInspectionDate} type="date" max={today} onChange={v => set("stateInspectionDate", v)} />
+          <Field label="State Interval (months)" value={form.stateInspectionInterval} type="number" mono onChange={v => set("stateInspectionInterval", v)} onBlur={() => onBlur("stateInspectionInterval")} error={errors.stateInspectionInterval} />
+        </DrawerFieldRow>
+        {inspectionDocs && (
+          <DrawerFileField
+            label="State Inspection Document"
+            hint="Photo or scan of the state inspection report"
+            accept="image/*"
+            imageUrl={inspectionDocs.state.imageUrl}
+            busy={inspectionDocs.state.busy}
+            onUpload={inspectionDocs.state.onUpload}
+            onDelete={inspectionDocs.state.onDelete}
+          />
+        )}
+        <DrawerFieldRow>
+          <Field label="PM Service Interval (mi)" value={form.pmServiceInterval} type="number" mono onChange={v => set("pmServiceInterval", v)} onBlur={() => onBlur("pmServiceInterval")} error={errors.pmServiceInterval} />
+          <Field label="Tire Change Interval (mi)" value={form.tireChangeInterval} type="number" mono onChange={v => set("tireChangeInterval", v)} onBlur={() => onBlur("tireChangeInterval")} error={errors.tireChangeInterval} />
+        </DrawerFieldRow>
+      </DrawerSection>
     </>
   );
 }
@@ -316,10 +393,18 @@ export default function Trailers() {
   const [makes,         setMakes]         = useState<MakeItem[]>([]);
   const [models,        setModels]        = useState<ModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [inspectionHashes, setInspectionHashes] = useState<{ federal: string | null; state: string | null }>({ federal: null, state: null });
+  const [inspectionBusy,   setInspectionBusy]   = useState<InspectionType | null>(null);
+  const { data: pageRefData } = useRefData();
+  const imagesHost = pageRefData?.imagesHost ?? "";
 
   useEffect(() => {
     setFormState(selected ? formFromItem(selected) : emptyForm());
     setErrors({});
+    setInspectionHashes({
+      federal: selected?.federal_inspection_hash ?? null,
+      state:   selected?.state_inspection_hash   ?? null,
+    });
   }, [selected]);
 
   async function loadData() {
@@ -414,7 +499,8 @@ export default function Trailers() {
         make:              form.makeId          ? parseInt(form.makeId)          : null,
         model:             form.modelId         ? parseInt(form.modelId)         : null,
         vin:               form.vin             || null,
-        plateNumber:       form.plateNumber     || null,
+        plateNumber:         form.plateNumber         || null,
+        plateExpirationDate: form.plateExpirationDate || null,
         color:             form.color           || null,
         length:            form.length          ? parseInt(form.length)          : null,
         width:             form.width           ? parseInt(form.width)           : null,
@@ -439,8 +525,14 @@ export default function Trailers() {
         liftgate:          form.liftgate,
         hazmatCertified:   form.hazmatCertified,
         thermoKingUnit:    form.thermoKingUnit,
-        odometer:          form.odometer      ? parseInt(form.odometer, 10) : null,
-        homeLocation:      form.homeLocation  || null,
+        odometer:                  form.odometer                  ? parseInt(form.odometer, 10)                  : null,
+        tireChangeInterval:        form.tireChangeInterval        ? parseInt(form.tireChangeInterval, 10)        : null,
+        pmServiceInterval:         form.pmServiceInterval         ? parseInt(form.pmServiceInterval, 10)         : null,
+        federalInspectionInterval: form.federalInspectionInterval ? parseInt(form.federalInspectionInterval, 10) : null,
+        stateInspectionInterval:   form.stateInspectionInterval   ? parseInt(form.stateInspectionInterval, 10)   : null,
+        federalInspectionDate:     form.federalInspectionDate     || null,
+        stateInspectionDate:       form.stateInspectionDate       || null,
+        homeLocation:              form.homeLocation              || null,
         purchaseDate:      form.purchaseDate  || null,
         purchasePrice:     form.purchasePrice || null,
         notes:             form.notes         || null,
@@ -473,6 +565,35 @@ export default function Trailers() {
       showToast(false, e instanceof ApiError ? e.message : "Delete failed. Please try again.");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleUploadInspection(type: InspectionType, file: File) {
+    if (!selected) return;
+    setInspectionBusy(type);
+    try {
+      const res = await apiUploadTrailerInspection(selected.id, type, file);
+      setInspectionHashes(prev => ({ ...prev, [type]: res.hash }));
+      showToast(true, `${type === "federal" ? "Federal" : "State"} inspection uploaded`);
+    } catch (e) {
+      showToast(false, e instanceof ApiError ? e.message : "Upload failed");
+    } finally {
+      setInspectionBusy(null);
+    }
+  }
+
+  async function handleDeleteInspection(type: InspectionType) {
+    if (!selected) return;
+    if (!window.confirm(`Remove ${type === "federal" ? "federal" : "state"} inspection document?`)) return;
+    setInspectionBusy(type);
+    try {
+      await apiDeleteTrailerInspection(selected.id, type);
+      setInspectionHashes(prev => ({ ...prev, [type]: null }));
+      showToast(true, `${type === "federal" ? "Federal" : "State"} inspection removed`);
+    } catch (e) {
+      showToast(false, e instanceof ApiError ? e.message : "Delete failed");
+    } finally {
+      setInspectionBusy(null);
     }
   }
 
@@ -585,7 +706,23 @@ export default function Trailers() {
         onDelete={drawerMode === "edit" && selected ? () => handleDelete(selected) : undefined}
         deleting={deleting}
       >
-        <TrailerFormFields form={form} set={set} setBool={setBool} errors={errors} onBlur={handleBlur} makes={makes} models={models} modelsLoading={modelsLoading} />
+        <TrailerFormFields
+          form={form} set={set} setBool={setBool} errors={errors} onBlur={handleBlur} makes={makes} models={models} modelsLoading={modelsLoading}
+          inspectionDocs={drawerMode === "edit" && selected ? {
+            federal: {
+              imageUrl: documentUrl(imagesHost, "trailers", inspectionHashes.federal, "full"),
+              busy:     inspectionBusy === "federal",
+              onUpload: (file) => handleUploadInspection("federal", file),
+              onDelete: () => handleDeleteInspection("federal"),
+            },
+            state: {
+              imageUrl: documentUrl(imagesHost, "trailers", inspectionHashes.state, "full"),
+              busy:     inspectionBusy === "state",
+              onUpload: (file) => handleUploadInspection("state", file),
+              onDelete: () => handleDeleteInspection("state"),
+            },
+          } : undefined}
+        />
       </SlideDrawer>
     </>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { User2, Calendar, Shield, CheckCircle, Save, Upload } from "lucide-react";
+import { User2, Calendar, Shield, CheckCircle, Save } from "lucide-react";
 import { Btn } from "../lib/ui";
 import { useAuth } from "../lib/auth";
 import { apiUpdateProfile, ApiError } from "../lib/api";
@@ -115,15 +115,6 @@ function AvatarUpload({ initials }: { initials: string }) {
     <div className="flex items-center gap-4">
       <div className="w-16 h-16 rounded-full bg-primary/20 border-2 border-primary/30 flex items-center justify-center flex-shrink-0">
         <span className="text-lg font-semibold text-primary">{initials}</span>
-      </div>
-      <div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 text-xs font-mono border border-border rounded px-3 py-1.5 text-foreground hover:border-white/20 transition-colors">
-            <Upload size={11} />Upload photo
-          </button>
-          <button className="text-xs font-mono text-muted-foreground hover:text-red-400 transition-colors px-2">Remove</button>
-        </div>
-        <p className="text-xs font-mono text-muted-foreground mt-1.5">JPG, PNG or GIF · max 2 MB</p>
       </div>
     </div>
   );

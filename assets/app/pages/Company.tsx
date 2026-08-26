@@ -7,6 +7,7 @@ import { apiUpdateCompany, ApiError } from "../lib/api";
 import { useRefData, type StateOption } from "../lib/data";
 import {
   validateRequired, validateEmail, validatePhone, validateUrl, validateZip,
+  formatDate,
 } from "../lib/validators";
 import { maskPhone, maskZip } from "../lib/masks";
 
@@ -365,7 +366,7 @@ export default function Company() {
                 <div className="flex-1 p-3 rounded-lg border border-border bg-muted/30">
                   <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Valid Until</p>
                   <p className="text-sm font-semibold text-foreground">
-                    {new Date(co.validUntil).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                    {formatDate(co.validUntil)}
                   </p>
                 </div>
               )}

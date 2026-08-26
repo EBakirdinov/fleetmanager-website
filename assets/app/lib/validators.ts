@@ -104,3 +104,29 @@ export function combineValidators(...validators: Validator[]): Validator {
 export function upperCaseTransform(v: string): string {
   return v.toUpperCase();
 }
+
+// Today's date in local timezone as YYYY-MM-DD — suitable for the `max`
+// attribute of <input type="date"> to block future selections.
+export function todayIsoDate(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// Platform-wide display format for dates: MM/DD/YYYY. Accepts either an
+// ISO date string ("2026-08-15") or a Date. Returns empty string when the
+// input is null/undefined/unparseable, so callers can `{formatDate(x) || "—"}`.
+export function formatDate(input: string | Date | null | undefined): string {
+  if (!input) return "";
+  // Parse a bare "YYYY-MM-DD" as local time to avoid the ISO-string UTC shift.
+  const d = typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)
+    ? new Date(`${input}T00:00:00`)
+    : new Date(input);
+  if (Number.isNaN(d.getTime())) return "";
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
+}

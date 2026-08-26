@@ -11,10 +11,12 @@ import {
   apiListTrailers, type TrailerItem,
   apiListTruckMakes, apiListTruckModels, type MakeItem, type ModelItem,
   apiUploadTruckImage, apiDeleteTruckImage, documentUrl,
+  apiUploadTruckInspection, apiDeleteTruckInspection, type InspectionType,
   apiGetFleetLocations, type TruckLocation,
 } from "../lib/api";
-import { validateVIN, validateYear, validatePositiveInt, validateRequired, combineValidators } from "../lib/validators";
+import { validateVIN, validateYear, validatePositiveInt, validateRequired, combineValidators, todayIsoDate, formatDate } from "../lib/validators";
 import { ImportedChip } from "../components/ImportedChip";
+import { EldSourceChip } from "../components/EldSourceChip";
 import { ImportDropdown } from "../components/ImportDropdown";
 
 // ─── Form state ──────────────────────────────────────────────────────────────
@@ -27,6 +29,7 @@ interface TruckForm {
   vin: string;
   plateNumber: string;
   plateState: string;
+  plateExpirationDate: string;
   color: string;
   bedCount: string;
   cabType: string;
@@ -42,23 +45,28 @@ interface TruckForm {
   homeTerminal: string;
   currentMileage: string;
   engineHours: string;
-  lastInspectionDate: string;
-  inspectionInterval: string;
+  federalInspectionDate: string;
+  federalInspectionInterval: string;
+  stateInspectionDate: string;
+  stateInspectionInterval: string;
   oilChangeInterval: string;
   pmServiceInterval: string;
+  tireChangeInterval: string;
   status: string;
   assignedTrailerId: string;
 }
 
 const emptyForm = (): TruckForm => ({
-  truckNumber: "", year: "", makeId: "", modelId: "", vin: "", plateNumber: "", plateState: "",
+  truckNumber: "", year: "", makeId: "", modelId: "", vin: "", plateNumber: "", plateState: "", plateExpirationDate: "",
   color: "", bedCount: "", cabType: "", sleeperSize: "",
   engineType: "", engineNumber: "",
   fuelType: "", transmission: "",
   axleCount: "", gvwr: "", fuelCapacity: "",
   currentLocation: "", homeTerminal: "",
   currentMileage: "", engineHours: "",
-  lastInspectionDate: "", inspectionInterval: "", oilChangeInterval: "", pmServiceInterval: "",
+  federalInspectionDate: "", federalInspectionInterval: "",
+  stateInspectionDate: "", stateInspectionInterval: "",
+  oilChangeInterval: "", pmServiceInterval: "", tireChangeInterval: "",
   status: "1",
   assignedTrailerId: "",
 });
@@ -70,8 +78,9 @@ function formFromItem(t: TruckItem): TruckForm {
     makeId:             t.make?.id?.toString()  ?? "",
     modelId:            t.model?.id?.toString() ?? "",
     vin:                t.vin                 ?? "",
-    plateNumber:        t.plate_number        ?? "",
-    plateState:         t.plate_state         ?? "",
+    plateNumber:         t.plate_number          ?? "",
+    plateState:          t.plate_state           ?? "",
+    plateExpirationDate: t.plate_expiration_date ?? "",
     color:              t.color               ?? "",
     bedCount:           t.bed_count?.toString()     ?? "",
     cabType:            t.cab_type            ?? "",
@@ -87,10 +96,13 @@ function formFromItem(t: TruckItem): TruckForm {
     homeTerminal:       t.home_terminal       ?? "",
     currentMileage:     t.current_mileage?.toString() ?? "",
     engineHours:        t.engine_hours?.toString()    ?? "",
-    lastInspectionDate: t.last_inspection_date ?? "",
-    inspectionInterval: t.inspection_interval?.toString() ?? "",
-    oilChangeInterval:  t.oil_change_interval?.toString() ?? "",
-    pmServiceInterval:  t.pm_service_interval?.toString() ?? "",
+    federalInspectionDate:     t.federal_inspection_date ?? "",
+    federalInspectionInterval: t.federal_inspection_interval?.toString() ?? "",
+    stateInspectionDate:       t.state_inspection_date ?? "",
+    stateInspectionInterval:   t.state_inspection_interval?.toString() ?? "",
+    oilChangeInterval:  t.oil_change_interval?.toString()  ?? "",
+    pmServiceInterval:  t.pm_service_interval?.toString()  ?? "",
+    tireChangeInterval: t.tire_change_interval?.toString() ?? "",
     status:             t.status?.toString()  ?? "1",
     assignedTrailerId:  t.assigned_trailer?.id?.toString() ?? "",
   };
@@ -112,9 +124,11 @@ const TRUCK_VALIDATORS: Partial<Record<keyof TruckForm, (v: string) => string | 
   fuelCapacity:       validatePositiveInt,
   currentMileage:     validatePositiveInt,
   engineHours:        validatePositiveInt,
-  inspectionInterval: validatePositiveInt,
-  oilChangeInterval:  validatePositiveInt,
-  pmServiceInterval:  validatePositiveInt,
+  federalInspectionInterval: validatePositiveInt,
+  stateInspectionInterval:   validatePositiveInt,
+  oilChangeInterval:         validatePositiveInt,
+  pmServiceInterval:         validatePositiveInt,
+  tireChangeInterval:        validatePositiveInt,
 };
 
 function validateAllTruck(form: TruckForm): Record<string, string | null> {
@@ -131,7 +145,14 @@ function validateAllTruck(form: TruckForm): Record<string, string | null> {
 
 // ─── Truck form component ────────────────────────────────────────────────────
 
-function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoading, trailers, currentTruckId, exteriorImage }: {
+type InspectionDocSlot = {
+  imageUrl: string | null;
+  busy:     boolean;
+  onUpload: (file: File) => void;
+  onDelete: () => void;
+};
+
+function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoading, trailers, currentTruckId, exteriorImage, inspectionDocs }: {
   form: TruckForm;
   set: (k: keyof TruckForm, v: string) => void;
   errors: Record<string, string | null>;
@@ -150,6 +171,12 @@ function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoadi
     onUpload: (file: File) => void;
     onDelete: () => void;
   };
+  /** Federal / state inspection document slots. Rendered as their own section
+   *  after Maintenance Intervals. When omitted (add mode), the section is hidden. */
+  inspectionDocs?: {
+    federal: InspectionDocSlot;
+    state:   InspectionDocSlot;
+  };
 }) {
   const { data: refData } = useRefData();
   const states       = refData?.states            ?? [];
@@ -165,6 +192,7 @@ function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoadi
     : modelsLoading
       ? "Loading…"
       : "— Select —";
+  const today = todayIsoDate();
 
   return (
     <>
@@ -191,6 +219,10 @@ function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoadi
             <option value="">— Select —</option>
             {states.map(s => <option key={s.value} value={s.value}>{s.value} — {s.label}</option>)}
           </Select>
+        </DrawerFieldRow>
+        <DrawerFieldRow>
+          <Field label="Plate Expiration" value={form.plateExpirationDate} type="date" onChange={v => set("plateExpirationDate", v)} />
+          <div />
         </DrawerFieldRow>
       </DrawerSection>
 
@@ -276,12 +308,44 @@ function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoadi
       </DrawerSection>
 
       <DrawerSection title="Maintenance Intervals">
-        <Field label="Last Inspection Date" value={form.lastInspectionDate} type="date" onChange={v => set("lastInspectionDate", v)} />
         <DrawerFieldRow>
-          <Field label="Inspection Interval (mi)" value={form.inspectionInterval} type="number" mono onChange={v => set("inspectionInterval", v)} onBlur={() => onBlur("inspectionInterval")} error={errors.inspectionInterval} />
-          <Field label="Oil Change Interval (mi)" value={form.oilChangeInterval} type="number" mono onChange={v => set("oilChangeInterval", v)} onBlur={() => onBlur("oilChangeInterval")} error={errors.oilChangeInterval} />
+          <Field label="Last Federal Inspection" value={form.federalInspectionDate} type="date" max={today} onChange={v => set("federalInspectionDate", v)} />
+          <Field label="Federal Interval (months)" value={form.federalInspectionInterval} type="number" mono onChange={v => set("federalInspectionInterval", v)} onBlur={() => onBlur("federalInspectionInterval")} error={errors.federalInspectionInterval} />
         </DrawerFieldRow>
-        <Field label="PM Service Interval (mi)" value={form.pmServiceInterval} type="number" mono onChange={v => set("pmServiceInterval", v)} onBlur={() => onBlur("pmServiceInterval")} error={errors.pmServiceInterval} />
+        {inspectionDocs && (
+          <DrawerFileField
+            label="Federal Inspection Document"
+            hint="Photo or scan of the DOT annual inspection report"
+            accept="image/*"
+            imageUrl={inspectionDocs.federal.imageUrl}
+            busy={inspectionDocs.federal.busy}
+            onUpload={inspectionDocs.federal.onUpload}
+            onDelete={inspectionDocs.federal.onDelete}
+          />
+        )}
+        <DrawerFieldRow>
+          <Field label="Last State Inspection" value={form.stateInspectionDate} type="date" max={today} onChange={v => set("stateInspectionDate", v)} />
+          <Field label="State Interval (months)" value={form.stateInspectionInterval} type="number" mono onChange={v => set("stateInspectionInterval", v)} onBlur={() => onBlur("stateInspectionInterval")} error={errors.stateInspectionInterval} />
+        </DrawerFieldRow>
+        {inspectionDocs && (
+          <DrawerFileField
+            label="State Inspection Document"
+            hint="Photo or scan of the state inspection report"
+            accept="image/*"
+            imageUrl={inspectionDocs.state.imageUrl}
+            busy={inspectionDocs.state.busy}
+            onUpload={inspectionDocs.state.onUpload}
+            onDelete={inspectionDocs.state.onDelete}
+          />
+        )}
+        <DrawerFieldRow>
+          <Field label="Oil Change Interval (mi)" value={form.oilChangeInterval} type="number" mono onChange={v => set("oilChangeInterval", v)} onBlur={() => onBlur("oilChangeInterval")} error={errors.oilChangeInterval} />
+          <Field label="PM Service Interval (mi)" value={form.pmServiceInterval} type="number" mono onChange={v => set("pmServiceInterval", v)} onBlur={() => onBlur("pmServiceInterval")} error={errors.pmServiceInterval} />
+        </DrawerFieldRow>
+        <DrawerFieldRow>
+          <Field label="Tire Change Interval (mi)" value={form.tireChangeInterval} type="number" mono onChange={v => set("tireChangeInterval", v)} onBlur={() => onBlur("tireChangeInterval")} error={errors.tireChangeInterval} />
+          <div />
+        </DrawerFieldRow>
       </DrawerSection>
     </>
   );
@@ -294,28 +358,42 @@ const TRUCK_STATUS_COLOR: Record<number, string> = { 1: "#10b981", 0: "#ef4444" 
 
 /**
  * Inspection status per doc — three-state summary shown below the last
- * inspection date. We don't track the mileage at which the inspection was
- * done, so "Overdue" is date-based (DOT annual = 365 days) and "Completed"
- * follows option A (last date within 7 days). The middle case shows the
- * interval as a static reminder.
+ * inspection date. Interval is stored in months; "Overdue" uses the
+ * configured interval (falling back to DOT annual = 12 months when unset)
+ * and "Completed" follows option A (last date within 7 days). The middle
+ * case shows the remaining time as a static reminder.
+ *
+ * Computed separately for federal (DOT annual default) and state.
  */
 type InspectionStatus =
   | { kind: "none" }
   | { kind: "completed" }
   | { kind: "overdue" }
-  | { kind: "due"; miles: number };
+  | { kind: "due"; months: number };
 
-function inspectionStatus(t: TruckItem): InspectionStatus {
-  if (!t.last_inspection_date) return { kind: "none" };
-  const then = new Date(t.last_inspection_date).getTime();
+const DAYS_PER_MONTH = 30.44;
+const FEDERAL_DEFAULT_MONTHS = 12;
+
+function inspectionStatusFor(dateStr: string | null | undefined, intervalMonths: number | null | undefined, defaultMonths: number | null): InspectionStatus {
+  if (!dateStr) return { kind: "none" };
+  const then = new Date(dateStr).getTime();
   if (Number.isNaN(then)) return { kind: "none" };
   const daysSince = (Date.now() - then) / (24 * 60 * 60 * 1000);
-  if (daysSince < 7)   return { kind: "completed" };
-  if (daysSince > 365) return { kind: "overdue" };
-  if (t.inspection_interval != null && t.inspection_interval > 0) {
-    return { kind: "due", miles: t.inspection_interval };
-  }
-  return { kind: "none" };
+  if (daysSince < 7) return { kind: "completed" };
+  const months = intervalMonths && intervalMonths > 0 ? intervalMonths : defaultMonths;
+  if (!months || months <= 0) return { kind: "none" };
+  const intervalDays = months * DAYS_PER_MONTH;
+  if (daysSince > intervalDays) return { kind: "overdue" };
+  const monthsLeft = Math.max(1, Math.ceil((intervalDays - daysSince) / DAYS_PER_MONTH));
+  return { kind: "due", months: monthsLeft };
+}
+
+function federalInspectionStatus(t: TruckItem): InspectionStatus {
+  return inspectionStatusFor(t.federal_inspection_date, t.federal_inspection_interval, FEDERAL_DEFAULT_MONTHS);
+}
+
+function stateInspectionStatus(t: TruckItem): InspectionStatus {
+  return inspectionStatusFor(t.state_inspection_date, t.state_inspection_interval, null);
 }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -339,6 +417,8 @@ export default function Trucks() {
   const [trailers,      setTrailers]      = useState<TrailerItem[]>([]);
   const [exteriorHash,  setExteriorHash]  = useState<string | null>(null);
   const [imageBusy,     setImageBusy]     = useState(false);
+  const [inspectionHashes, setInspectionHashes] = useState<{ federal: string | null; state: string | null }>({ federal: null, state: null });
+  const [inspectionBusy,   setInspectionBusy]   = useState<InspectionType | null>(null);
   const [positions,     setPositions]     = useState<TruckLocation[]>([]);
   const { data: refData } = useRefData();
   const imagesHost = refData?.imagesHost ?? "";
@@ -363,6 +443,10 @@ export default function Trucks() {
     setForm(selected ? formFromItem(selected) : emptyForm());
     setErrors({});
     setExteriorHash(selected?.exterior_image_hash ?? null);
+    setInspectionHashes({
+      federal: selected?.federal_inspection_hash ?? null,
+      state:   selected?.state_inspection_hash   ?? null,
+    });
   }, [selected]);
 
   async function loadData() {
@@ -470,8 +554,9 @@ export default function Trucks() {
         make:               form.makeId             ? parseInt(form.makeId)             : null,
         model:              form.modelId            ? parseInt(form.modelId)            : null,
         vin:                form.vin                || null,
-        plateNumber:        form.plateNumber        || null,
-        plateState:         form.plateState         || null,
+        plateNumber:         form.plateNumber         || null,
+        plateState:          form.plateState          || null,
+        plateExpirationDate: form.plateExpirationDate || null,
         color:              form.color              || null,
         bedCount:           form.bedCount           ? parseInt(form.bedCount)           : null,
         cabType:            form.cabType            || null,
@@ -487,10 +572,13 @@ export default function Trucks() {
         homeTerminal:       form.homeTerminal       || null,
         currentMileage:     form.currentMileage     ? parseInt(form.currentMileage)     : null,
         engineHours:        form.engineHours        ? parseInt(form.engineHours)        : null,
-        lastInspectionDate: form.lastInspectionDate || null,
-        inspectionInterval: form.inspectionInterval ? parseInt(form.inspectionInterval) : null,
+        federalInspectionDate:     form.federalInspectionDate     || null,
+        federalInspectionInterval: form.federalInspectionInterval ? parseInt(form.federalInspectionInterval) : null,
+        stateInspectionDate:       form.stateInspectionDate       || null,
+        stateInspectionInterval:   form.stateInspectionInterval   ? parseInt(form.stateInspectionInterval)   : null,
         oilChangeInterval:  form.oilChangeInterval  ? parseInt(form.oilChangeInterval)  : null,
         pmServiceInterval:  form.pmServiceInterval  ? parseInt(form.pmServiceInterval)  : null,
+        tireChangeInterval: form.tireChangeInterval ? parseInt(form.tireChangeInterval) : null,
         status:             parseInt(form.status),
         assignedTrailer:    form.assignedTrailerId  ? parseInt(form.assignedTrailerId)  : null,
       };
@@ -555,6 +643,35 @@ export default function Trucks() {
     }
   }
 
+  async function handleUploadInspection(type: InspectionType, file: File) {
+    if (!selected) return;
+    setInspectionBusy(type);
+    try {
+      const res = await apiUploadTruckInspection(selected.id, type, file);
+      setInspectionHashes(prev => ({ ...prev, [type]: res.hash }));
+      showToast(true, `${type === "federal" ? "Federal" : "State"} inspection uploaded`);
+    } catch (e) {
+      showToast(false, e instanceof ApiError ? e.message : "Upload failed");
+    } finally {
+      setInspectionBusy(null);
+    }
+  }
+
+  async function handleDeleteInspection(type: InspectionType) {
+    if (!selected) return;
+    if (!window.confirm(`Remove ${type === "federal" ? "federal" : "state"} inspection document?`)) return;
+    setInspectionBusy(type);
+    try {
+      await apiDeleteTruckInspection(selected.id, type);
+      setInspectionHashes(prev => ({ ...prev, [type]: null }));
+      showToast(true, `${type === "federal" ? "Federal" : "State"} inspection removed`);
+    } catch (e) {
+      showToast(false, e instanceof ApiError ? e.message : "Delete failed");
+    } finally {
+      setInspectionBusy(null);
+    }
+  }
+
   const total    = items.length;
   const active   = items.filter(t => t.status === 1).length;
   const inactive = items.filter(t => t.status === 0).length;
@@ -605,7 +722,7 @@ export default function Trucks() {
               <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    {["Truck", "Driver", "Status", "Location", "Eng. Hrs", "Inspection", ""].map(h => (
+                    {["Truck", "Driver", "Status", "Location", "Eng. Hrs", "Federal Insp.", "State Insp.", ""].map(h => (
                       <th key={h} className="text-left px-3 py-2.5 text-xs font-mono text-muted-foreground tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -617,7 +734,8 @@ export default function Trucks() {
                       ? [t.assigned_driver.first_name, t.assigned_driver.last_name].filter(Boolean).join(" ") || `Driver #${t.assigned_driver.id}`
                       : null;
                     const pos        = positionByTruckId.get(t.id);
-                    const insp       = inspectionStatus(t);
+                    const federalInsp = federalInspectionStatus(t);
+                    const stateInsp   = stateInspectionStatus(t);
                     return (
                       <tr
                         key={t.id}
@@ -675,14 +793,24 @@ export default function Trucks() {
                           {t.engine_hours != null ? t.engine_hours.toLocaleString() : "—"}
                         </td>
 
-                        {/* Inspection: date + status */}
+                        {/* Federal Inspection: date + status */}
                         <td className="px-3 py-2.5 whitespace-nowrap">
-                          {t.last_inspection_date
-                            ? <div className="text-xs font-mono text-foreground">{t.last_inspection_date}</div>
+                          {t.federal_inspection_date
+                            ? <div className="text-xs font-mono text-foreground">{formatDate(t.federal_inspection_date)}</div>
                             : <div className="text-xs text-muted-foreground">—</div>}
-                          {insp.kind === "completed" && <div className="text-[11px] font-mono text-emerald-400 mt-0.5">Completed</div>}
-                          {insp.kind === "overdue"   && <div className="text-[11px] font-mono text-red-400 mt-0.5">Overdue</div>}
-                          {insp.kind === "due"       && <div className="text-[11px] font-mono text-muted-foreground mt-0.5">Due in {insp.miles.toLocaleString()} mi</div>}
+                          {federalInsp.kind === "completed" && <div className="text-[11px] font-mono text-emerald-400 mt-0.5">Completed</div>}
+                          {federalInsp.kind === "overdue"   && <div className="text-[11px] font-mono text-red-400 mt-0.5">Overdue</div>}
+                          {federalInsp.kind === "due"       && <div className="text-[11px] font-mono text-muted-foreground mt-0.5">Due in {federalInsp.months} {federalInsp.months === 1 ? "month" : "months"}</div>}
+                        </td>
+
+                        {/* State Inspection: date + status */}
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          {t.state_inspection_date
+                            ? <div className="text-xs font-mono text-foreground">{formatDate(t.state_inspection_date)}</div>
+                            : <div className="text-xs text-muted-foreground">—</div>}
+                          {stateInsp.kind === "completed" && <div className="text-[11px] font-mono text-emerald-400 mt-0.5">Completed</div>}
+                          {stateInsp.kind === "overdue"   && <div className="text-[11px] font-mono text-red-400 mt-0.5">Overdue</div>}
+                          {stateInsp.kind === "due"       && <div className="text-[11px] font-mono text-muted-foreground mt-0.5">Due in {stateInsp.months} {stateInsp.months === 1 ? "month" : "months"}</div>}
                         </td>
 
                         <td className="px-3 py-2.5">
@@ -695,7 +823,7 @@ export default function Trucks() {
                   })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-3 py-10 text-center text-xs font-mono text-muted-foreground">No trucks found</td>
+                      <td colSpan={8} className="px-3 py-10 text-center text-xs font-mono text-muted-foreground">No trucks found</td>
                     </tr>
                   )}
                 </tbody>
@@ -716,14 +844,14 @@ export default function Trucks() {
         onClose={() => setDrawerOpen(false)}
         title={drawerMode === "add" ? "Add New Truck" : "Edit Truck"}
         badge={drawerMode === "edit" ? (selected?.truck_number ?? `#${selected?.id}`) : "NEW"}
+        titleExtra={drawerMode === "edit" && selected?.eld_source
+          ? <EldSourceChip eldSource={selected.eld_source} />
+          : undefined}
         onSave={handleSave}
         saving={saving}
         onDelete={drawerMode === "edit" && selected ? () => handleDelete(selected) : undefined}
         deleting={deleting}
       >
-        {drawerMode === "edit" && selected?.eld_source && (
-          <div className="pb-3"><ImportedChip eldSource={selected.eld_source} /></div>
-        )}
         <TruckFormFields
           form={form} set={setField} errors={errors} onBlur={handleBlur} makes={makes} models={models} modelsLoading={modelsLoading}
           trailers={trailers} currentTruckId={selected?.id ?? null}
@@ -732,6 +860,20 @@ export default function Trucks() {
             busy:     imageBusy,
             onUpload: handleUploadExterior,
             onDelete: handleDeleteExterior,
+          } : undefined}
+          inspectionDocs={drawerMode === "edit" && selected ? {
+            federal: {
+              imageUrl: documentUrl(imagesHost, "trucks", inspectionHashes.federal, "full"),
+              busy:     inspectionBusy === "federal",
+              onUpload: (file) => handleUploadInspection("federal", file),
+              onDelete: () => handleDeleteInspection("federal"),
+            },
+            state: {
+              imageUrl: documentUrl(imagesHost, "trucks", inspectionHashes.state, "full"),
+              busy:     inspectionBusy === "state",
+              onUpload: (file) => handleUploadInspection("state", file),
+              onDelete: () => handleDeleteInspection("state"),
+            },
           } : undefined}
         />
       </SlideDrawer>

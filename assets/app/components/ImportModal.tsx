@@ -216,15 +216,38 @@ export function ImportModal({
                 <div className="flex items-start gap-2 border border-emerald-500/30 bg-emerald-500/10 rounded px-3 py-2 text-xs font-mono text-emerald-400">
                   <CheckCircle2 size={12} className="mt-0.5 flex-shrink-0" />
                   <span>
-                    Imported {result.imported} {resource}
+                    {result.imported > 0
+                      ? <>Imported {result.imported} {resource}</>
+                      : <>Synced with {sourceLabel}</>}
                     {result.linked   > 0 && <> · {result.linked} linked</>}
-                    {result.skipped  > 0 && <> · {result.skipped} skipped</>}
+                    {result.imported > 0 && result.skipped > 0 && <> · {result.skipped} skipped</>}
                     {(result.driversAutoImported ?? 0) > 0 && (
                       <> · {result.driversAutoImported} driver{result.driversAutoImported === 1 ? "" : "s"} auto-imported</>
+                    )}
+                    {(result.driversReassigned ?? 0) > 0 && (
+                      <> · {result.driversReassigned} driver reassignment{result.driversReassigned === 1 ? "" : "s"}</>
+                    )}
+                    {(result.trucksRefreshed ?? 0) > 0 && (
+                      <> · {result.trucksRefreshed} truck{result.trucksRefreshed === 1 ? "" : "s"} refreshed</>
+                    )}
+                    {(result.driversRefreshed ?? 0) > 0 && (
+                      <> · {result.driversRefreshed} driver{result.driversRefreshed === 1 ? "" : "s"} refreshed</>
+                    )}
+                    {(result.trucksInactivated ?? 0) > 0 && (
+                      <> · {result.trucksInactivated} truck{result.trucksInactivated === 1 ? "" : "s"} inactivated</>
+                    )}
+                    {(result.driversTerminated ?? 0) > 0 && (
+                      <> · {result.driversTerminated} driver{result.driversTerminated === 1 ? "" : "s"} terminated</>
                     )}
                     {result.errors.length > 0 && <> · {result.errors.length} failed</>}
                   </span>
                 </div>
+                {result.rosterIncomplete && (
+                  <div className="flex items-start gap-2 border border-amber-500/30 bg-amber-500/10 rounded px-3 py-2 text-xs font-mono text-amber-400">
+                    <AlertCircle size={12} className="mt-0.5 flex-shrink-0" />
+                    <span>Roster hit the pagination cap — removal detection was skipped this run. Records that vanished from the ELD side will remain <em>active</em> until the next full sync.</span>
+                  </div>
+                )}
                 {result.errors.length > 0 && (
                   <div className="flex flex-col gap-1 text-xs font-mono">
                     <div className="text-red-400 mb-1">Failures:</div>
@@ -249,9 +272,15 @@ export function ImportModal({
               >
                 Cancel
               </button>
-              <Btn variant="primary" onClick={runImport} disabled={importing || totalSelected === 0}>
+              <Btn
+                variant="primary"
+                onClick={runImport}
+                disabled={importing || (totalSelected === 0 && existCount === 0)}
+              >
                 <Download size={11} className="inline mr-1.5" />
-                {importing ? "Importing…" : `Import ${totalSelected}`}
+                {importing
+                  ? (totalSelected > 0 ? "Importing…" : "Syncing…")
+                  : (totalSelected > 0 ? `Import ${totalSelected}` : "Sync now")}
               </Btn>
             </div>
           )}

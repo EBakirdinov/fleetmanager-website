@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from "react";
 import {
-  Building2, User2, CheckCircle, AlertCircle, CreditCard, Download,
-  Lock, Upload, Save, X, ToggleLeft, ToggleRight, BadgeCheck,
-  Users, Shield, FileText,
+  Building2, User2, CheckCircle, AlertCircle,
+  Lock, Save, ToggleLeft, ToggleRight, BadgeCheck,
 } from "lucide-react";
 import { Btn, RightPanelSection } from "../lib/ui";
 
@@ -80,15 +79,6 @@ function AvatarUpload({ initials }: { initials: string }) {
     <div className="flex items-center gap-4">
       <div className="w-16 h-16 rounded-full bg-primary/20 border-2 border-primary/30 flex items-center justify-center flex-shrink-0">
         <span className="text-lg font-semibold text-primary">{initials}</span>
-      </div>
-      <div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 text-xs font-mono border border-border rounded px-3 py-1.5 text-foreground hover:border-white/20 transition-colors">
-            <Upload size={11} />Upload photo
-          </button>
-          <button className="text-xs font-mono text-muted-foreground hover:text-red-400 transition-colors px-2">Remove</button>
-        </div>
-        <p className="text-xs font-mono text-muted-foreground mt-1.5">JPG, PNG or GIF · max 2 MB</p>
       </div>
     </div>
   );
@@ -253,33 +243,6 @@ function SettingsRightPanel() {
           </div>
           <p className="text-xs font-mono text-muted-foreground">9 of 25 trucks used (36%)</p>
         </div>
-        <button className="mt-3 w-full text-xs font-mono text-primary border border-primary/30 rounded py-1.5 hover:bg-primary/5 transition-colors">
-          Upgrade Plan →
-        </button>
-      </RightPanelSection>
-      <RightPanelSection title="Quick Actions">
-        <div className="space-y-1">
-          {[
-            { Icon: Users,    label: "Invite Team Member"  },
-            { Icon: Download, label: "Export Company Data" },
-            { Icon: Shield,   label: "View Audit Log"      },
-            { Icon: FileText, label: "Download Invoices"   },
-          ].map(({ Icon, label }) => (
-            <button
-              key={label}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-left"
-            >
-              <Icon size={12} />
-              {label}
-            </button>
-          ))}
-        </div>
-      </RightPanelSection>
-      <RightPanelSection title="Danger Zone">
-        <div className="space-y-2">
-          <button className="w-full text-left text-xs font-mono text-red-400 hover:underline">Delete Company Account</button>
-          <button className="w-full text-left text-xs font-mono text-red-400 hover:underline">Transfer Ownership</button>
-        </div>
       </RightPanelSection>
     </aside>
   );
@@ -425,10 +388,6 @@ export default function Settings() {
                   <p className="text-xs font-mono text-muted-foreground mt-0.5">Your plan will renew on Jan 15, 2027. To cancel, contact support 30 days before.</p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Btn variant="outline"><CreditCard size={11} className="inline mr-1.5" />Update Payment Method</Btn>
-                <Btn variant="outline"><Download size={11} className="inline mr-1.5" />Download Invoices</Btn>
-              </div>
             </SettingsSection>
           </>
         )}
@@ -523,16 +482,12 @@ export default function Settings() {
                       <p className="text-xs font-medium text-foreground">{s.device}</p>
                       <p className="text-xs font-mono text-muted-foreground">{s.location} · {s.time}</p>
                     </div>
-                    {s.current
-                      ? <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">Current</span>
-                      : <button className="text-xs font-mono text-red-400 hover:underline">Revoke</button>
-                    }
+                    {s.current && (
+                      <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">Current</span>
+                    )}
                   </div>
                 ))}
               </div>
-              <Btn variant="danger">
-                <X size={11} className="inline mr-1.5" />Sign Out All Other Devices
-              </Btn>
             </SettingsSection>
           </>
         )}

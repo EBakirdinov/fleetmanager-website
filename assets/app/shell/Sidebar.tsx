@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router";
-import { Truck, Route, HelpCircle, LifeBuoy, ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import { Truck, Route, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { navSections } from "../lib/nav";
 import { useAuth } from "../lib/auth";
 
@@ -118,18 +118,8 @@ export default function Sidebar() {
         )} */}
       </nav>
 
-      {/* Bottom: help + user card */}
+      {/* Bottom: user card */}
       <div className="border-t border-sidebar-border">
-        {open && (
-          <div className="flex">
-            {[{ icon: HelpCircle, label: "Help" }, { icon: LifeBuoy, label: "Support" }].map(({ icon: Icon, label }) => (
-              <button key={label} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors text-xs">
-                <Icon size={11} />
-                <span className="font-medium">{label}</span>
-              </button>
-            ))}
-          </div>
-        )}
         <div className="p-2">
           {open ? (
             <button

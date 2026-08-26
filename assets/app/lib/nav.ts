@@ -20,9 +20,9 @@ export const navSections: NavSection[] = [
     label: "Fleet",
     items: [
       { path: "/dashboard", label: "Dashboard", title: "Dashboard",  sub: "Fleet overview and key metrics",                          icon: Home    },
+      { path: "/drivers",   label: "Drivers",   title: "Drivers",    sub: "Manage your drivers and keep all information up to date",  icon: Users   },
       { path: "/trucks",    label: "Trucks",    title: "Trucks",     sub: "Manage your trucks and keep all information up to date",   icon: Truck   },
       { path: "/trailers",  label: "Trailers",  title: "Trailers",   sub: "Manage your trailers and keep all information up to date", icon: Container },
-      { path: "/drivers",   label: "Drivers",   title: "Drivers",    sub: "Manage your drivers and keep all information up to date",  icon: Users   },
     ],
   },
   // {

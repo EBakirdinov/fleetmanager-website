@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Radio } from "lucide-react";
+import { Mail, MessageSquare, Radio } from "lucide-react";
 
 interface IconEntry {
   bg: string;
@@ -20,6 +20,14 @@ const REGISTRY: Record<string, IconEntry> = {
   quantum_eld: {
     bg: "#10b981",
     render: (size) => <Radio size={Math.round(size * 0.55)} color="white" strokeWidth={2} />,
+  },
+  sendgrid: {
+    bg: "#1A82E2",
+    render: (size) => <Mail size={Math.round(size * 0.55)} color="white" strokeWidth={2} />,
+  },
+  twilio: {
+    bg: "#F22F46",
+    render: (size) => <MessageSquare size={Math.round(size * 0.55)} color="white" strokeWidth={2} />,
   },
 };
 
