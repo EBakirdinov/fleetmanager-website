@@ -67,6 +67,34 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
+/** True when the user holds any of `roles`. Super admins pass everything. */
+export function hasRole(user: User | null, roles: string[]): boolean {
+  const held = user?.roles ?? [];
+  if (held.includes("ROLE_SUPER_ADMIN")) return true;
+  return roles.some(r => held.includes(r));
+}
+
+/**
+ * Gate a route on role. Wraps RequireAuth's job of waiting for the session to
+ * resolve, then bounces to the dashboard rather than the login page — the user
+ * is signed in, they just can't be here.
+ */
+export function RequireRole({ roles, children }: { roles: string[]; children: ReactNode }) {
+  const { user, status } = useAuth();
+
+  if (status === "loading") {
+    return (
+      <div className="flex items-center justify-center h-full w-full text-muted-foreground text-sm font-mono">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!hasRole(user, roles)) return <Navigate to="/dashboard" replace />;
+
+  return <>{children}</>;
+}
+
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { status } = useAuth();
   const location = useLocation();

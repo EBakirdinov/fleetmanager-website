@@ -1,37 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router";
-import { ChevronDown, LogOut, User as UserIcon } from "lucide-react";
-import { navItems } from "../lib/nav";
+import { useLocation, useNavigate } from "react-router";
+import { ChevronDown, LogOut, Settings as SettingsIcon, User as UserIcon } from "lucide-react";
+import { navEntryFor } from "../lib/nav";
 import ThemeToggle from "./ThemeToggle";
 import { useAuth } from "../lib/auth";
-
-function initialsOf(user: { firstName?: string | null; lastName?: string | null; email?: string } | null): string {
-  if (!user) return "?";
-  const f = (user.firstName ?? "").trim();
-  const l = (user.lastName ?? "").trim();
-  if (f || l) return (f.slice(0, 1) + l.slice(0, 1)).toUpperCase() || "?";
-  const e = (user.email ?? "").trim();
-  return e ? e.slice(0, 2).toUpperCase() : "?";
-}
-
-function displayName(user: { firstName?: string | null; lastName?: string | null; email?: string } | null): string {
-  if (!user) return "Signed out";
-  const name = [(user.firstName ?? "").trim(), (user.lastName ?? "").trim()].filter(Boolean).join(" ");
-  return name || user.email || "Signed in";
-}
-
-function roleLabel(roles: string[] | undefined): string {
-  if (!roles || roles.length === 0) return "Member";
-  if (roles.includes("ROLE_OWNER")) return "Owner";
-  if (roles.includes("ROLE_MANAGER")) return "Manager";
-  if (roles.includes("ROLE_DISPATCHER")) return "Dispatcher";
-  return "Member";
-}
+import { roleLabel } from "../lib/roles";
+import { displayName, initialsOf } from "../lib/user";
 
 export default function TopBar() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const entry = navItems.find((n) => pathname === n.path || pathname.startsWith(n.path + "/"));
+  const entry = navEntryFor(pathname);
   const title = entry?.title ?? "Fleet Manager";
   const sub = entry?.sub ?? "";
 
@@ -96,12 +76,22 @@ export default function TopBar() {
 
               <button
                 type="button"
-                disabled
                 role="menuitem"
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground rounded-sm cursor-not-allowed opacity-60"
+                onClick={() => { setMenuOpen(false); navigate("/settings/account"); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-foreground hover:bg-muted rounded-sm cursor-pointer transition-colors"
               >
                 <UserIcon size={14} />
-                Profile
+                My account
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { setMenuOpen(false); navigate("/settings"); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-foreground hover:bg-muted rounded-sm cursor-pointer transition-colors"
+              >
+                <SettingsIcon size={14} />
+                Settings
               </button>
 
               <div className="h-px bg-border my-1" />

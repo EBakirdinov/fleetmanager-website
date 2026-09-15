@@ -5,142 +5,19 @@ import { MapPin, Plug, Search, Truck, ArrowRight } from "lucide-react";
 import { Btn } from "../lib/ui";
 import { useAuth } from "../lib/auth";
 import { apiGetIntegrationConfig, apiGetFleetLocations, apiListTrucks, ApiError, type TruckLocation, type TruckItem } from "../lib/api";
+import {
+  loadGoogleMapsScript, USA_CENTER, USA_ZOOM, DARK_MAP_STYLE, LIGHT_MAP_STYLE,
+  type GMap, type GLatLng, type GPoint, type GProjection,
+  type GOverlayCtor, type GOverlayInstance, type GoogleNamespace,
+} from "../lib/googleMaps";
 
 interface GoogleMapsConfig {
   apiKey: string;
 }
 
-// Center of the contiguous US.
-const USA_CENTER = { lat: 39.8283, lng: -98.5795 };
-const USA_ZOOM = 4;
-
 /** How often the dashboard re-polls /api/fleet/locations. Matches the API
  *  cron cadence — pointless to poll faster than the data is refreshed. */
 const LOCATIONS_POLL_MS = 30_000;
-
-/**
- * Minimal dark style — geometry only, plus administrative labels (states,
- * localities). Everything else (POIs, road names, transit, water) is stripped
- * so a country-wide view stays readable.
- *
- * Google Maps automatically abbreviates state labels at low zoom ("TX" at
- * country view → "Texas" as you zoom in), so no explicit "show initials only"
- * rule is needed.
- */
-const DARK_MAP_STYLE: object[] = [
-  // Base palette
-  { elementType: "geometry",           stylers: [{ color: "#1d2a3a" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0f1923" }] },
-  { elementType: "labels.text.fill",   stylers: [{ color: "#8a9bb0" }] },
-
-  // Hide clutter: POIs, roads, transit, water labels
-  { featureType: "poi",     elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "road",    elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "water",   elementType: "labels", stylers: [{ visibility: "off" }] },
-
-  // Keep administrative (country, state, locality) — brighter for readability
-  { featureType: "administrative",           elementType: "labels.text.fill", stylers: [{ color: "#d4e0ea" }] },
-  { featureType: "administrative.locality",  elementType: "labels.text.fill", stylers: [{ color: "#d4e0ea" }] },
-  { featureType: "administrative.province",  elementType: "labels.text.fill", stylers: [{ color: "#e8eaed" }] },
-  { featureType: "administrative.country",   elementType: "labels.text.fill", stylers: [{ color: "#e8eaed" }] },
-
-  // Road/water geometry stays visible, just without labels
-  { featureType: "road",         elementType: "geometry",        stylers: [{ color: "#293848" }] },
-  { featureType: "road",         elementType: "geometry.stroke", stylers: [{ color: "#1d2a3a" }] },
-  { featureType: "road.highway", elementType: "geometry",        stylers: [{ color: "#3a4d63" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1d2a3a" }] },
-  { featureType: "transit",      elementType: "geometry",        stylers: [{ color: "#2c3e50" }] },
-  { featureType: "poi.park",     elementType: "geometry",        stylers: [{ color: "#1a3d2f" }] },
-  { featureType: "water",        elementType: "geometry",        stylers: [{ color: "#0f1923" }] },
-];
-
-/**
- * Light-mode counterpart — same structure (hides clutter labels, keeps
- * administrative labels) but with a bright palette that pairs with the
- * app's light theme.
- */
-const LIGHT_MAP_STYLE: object[] = [
-  { elementType: "geometry",           stylers: [{ color: "#f1f5f9" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
-  { elementType: "labels.text.fill",   stylers: [{ color: "#475569" }] },
-
-  { featureType: "poi",     elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "road",    elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "water",   elementType: "labels", stylers: [{ visibility: "off" }] },
-
-  { featureType: "administrative",          elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
-  { featureType: "administrative.province", elementType: "labels.text.fill", stylers: [{ color: "#1e293b" }] },
-  { featureType: "administrative.country",  elementType: "labels.text.fill", stylers: [{ color: "#1e293b" }] },
-
-  { featureType: "road",         elementType: "geometry",        stylers: [{ color: "#ffffff" }] },
-  { featureType: "road",         elementType: "geometry.stroke", stylers: [{ color: "#e2e8f0" }] },
-  { featureType: "road.highway", elementType: "geometry",        stylers: [{ color: "#ffe8a3" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#f5c85c" }] },
-  { featureType: "transit",      elementType: "geometry",        stylers: [{ color: "#e2e8f0" }] },
-  { featureType: "poi.park",     elementType: "geometry",        stylers: [{ color: "#d6ecd6" }] },
-  { featureType: "water",        elementType: "geometry",        stylers: [{ color: "#c7dff2" }] },
-];
-
-/** Global promise cache so multiple mounts don't re-inject the script. */
-let mapsScriptPromise: Promise<void> | null = null;
-
-function loadGoogleMapsScript(apiKey: string): Promise<void> {
-  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
-  const w = window as unknown as { google?: { maps?: unknown } };
-  if (w.google && w.google.maps) return Promise.resolve();
-  if (mapsScriptPromise) return mapsScriptPromise;
-
-  mapsScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => {
-      mapsScriptPromise = null;
-      reject(new Error("Failed to load Google Maps"));
-    };
-    document.head.appendChild(script);
-  });
-  return mapsScriptPromise;
-}
-
-// ─── Map component with live markers ─────────────────────────────────────────
-
-/**
- * Minimal typing for the bits of the Google Maps API we touch. Full types would
- * mean pulling `@types/google.maps` — overkill for this surface.
- */
-type GMap     = { setCenter: (c: { lat: number; lng: number }) => void; setZoom: (z: number) => void; setOptions: (opts: object) => void; setMapTypeId: (id: string) => void };
-type GLatLng  = { lat: () => number; lng: () => number };
-type GPoint      = { x: number; y: number };
-type GProjection = { fromLatLngToDivPixel: (ll: GLatLng) => GPoint | null };
-
-/** Bare minimum of google.maps.OverlayView we lean on. */
-interface GOverlayCtor {
-  new (): GOverlayInstance;
-  prototype: {
-    onAdd?:    () => void;
-    draw?:     () => void;
-    onRemove?: () => void;
-  };
-}
-interface GOverlayInstance {
-  setMap(m: GMap | null): void;
-  getPanes(): { overlayMouseTarget: HTMLElement };
-  getProjection(): GProjection | null;
-}
-
-interface GoogleNamespace {
-  maps: {
-    Map:          new (el: HTMLElement, opts: object) => GMap;
-    LatLng:       new (lat: number, lng: number) => GLatLng;
-    OverlayView:  GOverlayCtor;
-  };
-}
 
 // ─── Per-truck color + overlay factory ───────────────────────────────────────
 

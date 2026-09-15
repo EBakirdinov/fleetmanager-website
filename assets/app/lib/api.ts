@@ -46,6 +46,24 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The most useful sentence an error body has to offer.
+ *
+ * Two shapes reach us. The BFF's own routes answer `{error}`, while anything
+ * proxied to the API answers FOSRest's `{code, message}` — and we only ever
+ * read `error`, so every upstream message (a rejected password, a duplicate
+ * email, a validation failure) was arriving as "Request failed (400)".
+ */
+function errorMessage(body: unknown, status: number): string {
+  if (body && typeof body === "object") {
+    for (const key of ["error", "message"] as const) {
+      const value = (body as Record<string, unknown>)[key];
+      if (typeof value === "string" && value !== "") return value;
+    }
+  }
+  return `Request failed (${status})`;
+}
+
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: "include",
@@ -64,11 +82,7 @@ async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    const message =
-      (body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string")
-        ? (body as { error: string }).error
-        : `Request failed (${response.status})`;
-    throw new ApiError(response.status, message, body);
+    throw new ApiError(response.status, errorMessage(body, response.status), body);
   }
 
   return body as T;
@@ -113,6 +127,35 @@ export function apiProxy<T>(path: string, init?: RequestInit): Promise<T> {
   return apiJson<T>(`/api/proxy/${clean}`, init);
 }
 
+/**
+ * POST a file as multipart/form-data under field `file`.
+ *
+ * Kept separate from apiJson because the body must stay a FormData — setting
+ * Content-Type ourselves would strip the boundary the browser generates.
+ * Returns the parsed body untouched: most endpoints wrap their result in
+ * `{outcome, data}`, but the image ones answer with a bare array, so the
+ * caller decides how to read it.
+ */
+async function apiUpload(path: string, file: File): Promise<unknown> {
+  const fd = new FormData();
+  fd.append("file", file);
+
+  const res = await fetch(`/api/proxy/${path.replace(/^\/+/, "")}`, {
+    method: "POST",
+    credentials: "include",
+    body: fd,
+  });
+
+  const raw = await res.text();
+  const body = raw ? JSON.parse(raw) : null;
+
+  if (!res.ok) {
+    throw new ApiError(res.status, errorMessage(body, res.status), body);
+  }
+
+  return body;
+}
+
 export async function apiUpdateProfile(data: {
   firstName?: string;
   lastName?: string;
@@ -120,6 +163,8 @@ export async function apiUpdateProfile(data: {
   email?: string;
   address?: string;
   dayOff?: string[];
+  /** null removes the avatar — there is no DELETE route for it. */
+  imageHash?: string | null;
 }): Promise<void> {
   await apiProxy<unknown>("self/info", {
     method: "PATCH",
@@ -137,10 +182,59 @@ export async function apiUpdateCompany(id: number | string, data: {
   state?: string;
   zip?: string;
   url?: string;
+  /** null removes the logo — there is no DELETE route for it. */
+  imageHash?: string | null;
 }): Promise<void> {
   await apiProxy<unknown>(`company/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),
+  });
+}
+
+// ─── Avatar, logo and password ───────────────────────────────────────────────
+
+/**
+ * Pull the hash out of an image-upload response.
+ *
+ * `/self/image` and `/company/image` predate the {outcome, data} envelope the
+ * rest of the API uses — they answer with a bare `[{image_hash}]`, one entry
+ * per uploaded file. We only ever send one.
+ */
+function imageHashOf(body: unknown): string {
+  const first = Array.isArray(body) ? body[0] : body;
+  const hash = first && typeof first === "object"
+    ? (first as { image_hash?: unknown }).image_hash
+    : undefined;
+
+  if (typeof hash !== "string" || hash === "") {
+    throw new ApiError(200, "Upload succeeded but returned no image.", body);
+  }
+  return hash;
+}
+
+/** Upload the signed-in user's avatar. Returns the new image hash. */
+export async function apiUploadSelfImage(file: File): Promise<string> {
+  return imageHashOf(await apiUpload("self/image", file));
+}
+
+/** Upload the company logo. The API takes it from the caller's own company. */
+export async function apiUploadCompanyImage(file: File): Promise<string> {
+  return imageHashOf(await apiUpload("company/image", file));
+}
+
+/**
+ * Change your own password. The API refuses this for anyone but yourself,
+ * which is why it needs the current password rather than an admin check —
+ * admin-initiated resets go through apiResetWorkerPassword instead.
+ */
+export async function apiChangeOwnPassword(
+  userId: number | string,
+  oldPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await apiProxy<unknown>(`member/${userId}/password`, {
+    method: "PATCH",
+    body: JSON.stringify({ oldPassword, newPassword }),
   });
 }
 
@@ -363,6 +457,385 @@ export async function apiDeleteDriver(id: number): Promise<void> {
   await apiProxy<unknown>(`driver/${id}`, { method: "DELETE" });
 }
 
+// ─── Workers (company members) ───────────────────────────────────────────────
+
+/**
+ * A person who can sign in to the company account, served by /api/member.
+ *
+ * Note the snake_case: JMS serializes with its default CamelCaseNamingStrategy,
+ * so API responses use `first_name` even though the entity property is
+ * `firstName`. The camelCase `User` interface above is the exception — the
+ * Symfony session layer normalizes that one (see AccountService::getUserData).
+ * Request bodies, however, bind to a Symfony form and must stay camelCase.
+ */
+export interface WorkerItem {
+  id: number;
+  /** 1 = active, 0 = disabled. */
+  status: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  roles?: string[] | null;
+  image_hash?: string | null;
+  image?: { small?: string | null; medium?: string | null; large?: string | null } | null;
+  [key: string]: unknown;
+}
+
+export interface WorkerFilters {
+  /** "1" active only, "0" disabled only; omit for both. */
+  status?: string;
+  /** Searches first name, last name and email. */
+  name?: string;
+}
+
+export async function apiListWorkers(filters: WorkerFilters = {}): Promise<WorkerItem[]> {
+  const qs = new URLSearchParams({ count: "200" });
+  if (filters.status) qs.set("status", filters.status);
+  if (filters.name)   qs.set("name", filters.name);
+  const res = await apiProxy<{ outcome: string; data: PaginatedData<WorkerItem> }>(`member?${qs}`);
+  return pageItems(res);
+}
+
+export async function apiCreateWorker(data: Record<string, unknown>): Promise<void> {
+  await apiProxy<unknown>("member", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function apiUpdateWorker(id: number, data: Record<string, unknown>): Promise<void> {
+  await apiProxy<unknown>(`member/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+/** Enable (1) or disable (0). Disabling blocks sign-in but keeps the record. */
+export async function apiSetWorkerStatus(id: number, status: 0 | 1): Promise<void> {
+  await apiProxy<unknown>(`member/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+/** Admin-initiated reset — no current password needed, returns no token. */
+export async function apiResetWorkerPassword(id: number, password: string): Promise<void> {
+  await apiProxy<unknown>(`member/${id}/reset_password`, { method: "PATCH", body: JSON.stringify({ password }) });
+}
+
+// ─── Loads ───────────────────────────────────────────────────────────────────
+
+export interface LoadItem {
+  id: number;
+  status: string;
+  reference_number?: string | null;
+  origin?:           string | null;
+  destination?:      string | null;
+  pickup_date?:      string | null;
+  delivery_date?:    string | null;
+  /** Doctrine decimal comes across as a numeric string ("1250.00"). */
+  rate?:             string | null;
+  driver?: { id: number; first_name?: string | null; last_name?: string | null; phone?: string | null } | null;
+
+  // Section 4 — Equipment Requirements
+  trailer_type?:      string | null;
+  temperature?:       string | null;
+  weight_lbs?:        number | null;
+  pallets_pieces?:    string | null;
+  commodity?:         string | null;
+  hazmat?:            boolean | null;
+  seal_required?:     boolean | null;
+  straps_load_bars?:  string | null;
+
+  // Section 6 — Rate & Cost Breakdown (Doctrine decimals arrive as numbers via `float` serializer)
+  line_haul_rate?:    number | null;
+  fuel_surcharge?:    number | null;
+  accessorials?:      number | null;
+  detention?:         number | null;
+  estimated_cost?:    number | null;
+
+  // Section 9 — Notes
+  special_instructions?: string | null;
+  broker_notes?:         string | null;
+  internal_comments?:    string | null;
+
+  /** Sections 2 + 3 live here — one row per stop, ordered by sequence. */
+  stops?: LoadStopItem[] | null;
+
+  company?:    { id: number; name?: string | null } | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/** One pickup or delivery on a load. `type` is "pickup" | "delivery". */
+export interface LoadStopItem {
+  id:              number;
+  type:            string;
+  sequence?:       number | null;
+  facility_name?:  string | null;
+  address?:        string | null;
+  date?:           string | null;  // YYYY-MM-DD
+  window_start?:   string | null;  // HH:MM
+  window_end?:     string | null;
+  contact_person?: string | null;
+  phone?:          string | null;
+  hours_start?:    string | null;
+  hours_end?:      string | null;
+  scheduling_type?: string | null;
+  reference?:      string | null;
+  confirmed_on?:   string | null;  // ISO datetime
+  confirmed_by?:   string | null;
+  instructions?:   string | null;
+  eta?:            string | null;  // ISO datetime
+  pod_required?:   boolean | null;
+  store_dc?:       string | null;
+  latitude?:       number | null;
+  longitude?:      number | null;
+}
+
+export async function apiGetLoad(id: number | string): Promise<LoadItem> {
+  const res = await apiProxy<{ outcome: string; data: LoadItem }>(`load/${id}`);
+
+  return res.data;
+}
+
+/** Patch one section's worth of load fields. Untouched fields stay untouched. */
+export async function apiUpdateLoad(id: number | string, patch: Record<string, unknown>): Promise<void> {
+  await apiProxy<unknown>(`load/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+/** Patch a pickup or delivery stop in place. */
+export async function apiUpdateLoadStop(
+  loadId: number | string,
+  stopId: number | string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  await apiProxy<unknown>(`load/${loadId}/stop/${stopId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function apiListLoads(): Promise<LoadItem[]> {
+  const res = await apiProxy<{ outcome: string; data: PaginatedData<LoadItem> }>("load?count=200");
+  return pageItems(res);
+}
+
+export async function apiDeleteLoad(id: number): Promise<void> {
+  await apiProxy<unknown>(`load/${id}`, { method: "DELETE" });
+}
+
+// ─── Geocoding / Routing / Weather ───────────────────────────────────────────
+// Thin JSON wrappers over the backend services. All three return null when
+// the backend answers 404 (integration not connected, no result, etc.) so
+// callers can render a fallback instead of throwing.
+
+export interface GeocodeResult {
+  lat:       number;
+  lng:       number;
+  formatted: string;
+}
+
+export interface RouteSummary {
+  loaded_miles:      number;
+  empty_miles:       number | null;
+  total_miles:       number;
+  duration_sec:      number;
+  eta_pickup_sec:    number | null;
+  eta_delivery_sec:  number;
+}
+
+/**
+ * A single time-slice of weather. Returned as an array in WeatherForecast:
+ *   • 1 bucket  — window-specific reading (when the caller passed window
+ *                 start + end) with label like "08:00–12:00".
+ *   • 4 buckets — Morning / Afternoon / Evening / Night breakdown.
+ */
+export interface WeatherBucket {
+  label:       string;
+  temp_f:      number;
+  description: string;
+  code:        number;
+  rain_chance: number; // 0–100
+}
+
+export interface WeatherForecast {
+  buckets: WeatherBucket[];
+}
+
+async function nullOn404<T>(fn: () => Promise<T>): Promise<T | null> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+export function apiGeocode(address: string): Promise<GeocodeResult | null> {
+  return nullOn404(() => apiProxy<GeocodeResult>("geocode", {
+    method: "POST",
+    body:   JSON.stringify({ address }),
+  }));
+}
+
+// ─── Assignment (Dispatch) suggestions ──────────────────────────────────────
+
+/**
+ * One reason for or against a driver taking the load.
+ *
+ * `label` is a chip, never a sentence — "Lowboy", "Over by 6,000 lbs",
+ * "CDL expired Mar 4, 2026". A driver card can carry half a dozen of these
+ * and still be readable at a glance, which prose would not be.
+ */
+export interface AssignmentVerdict {
+  /** Stable machine code, e.g. "trailer_type_match", "driver_busy", "overweight". */
+  code:  string;
+  label: string;
+}
+
+/** A commitment the driver already has — what a `driver_busy` blocker points at. */
+export interface AssignmentActiveLoad {
+  load_id:          number;
+  reference_number: string | null;
+  status:           string;
+  pickup_date:      string | null;
+  delivery_date:    string | null;
+}
+
+/** Flat DTO from /api/assignment/suggestions — one entry per suggested driver. */
+export interface AssignmentSuggestion {
+  driver_id:             number;
+  driver_name:           string;
+  phone:                 string | null;
+  endorsement_hazardous: boolean;
+  truck_number:          string | null;
+  truck_spec:            string | null;
+  trailer_number:        string | null;
+  trailer_type:          string | null;
+  location_text:         string | null;
+  /** Raw timestamp of the last GPS fix, in whatever format the ELD reported. */
+  location_time:         string | null;
+  /** Minutes since that fix; null when it carried no usable timestamp. */
+  location_age_min:      number | null;
+  /** Fix too old to rank on. The mileage is still shown — a parked truck's
+   *  old fix is accurate — it just stops outranking known-current positions. */
+  location_stale:        boolean;
+  /** Straight-line miles to pickup; null when pickup coords or truck location unknown. */
+  distance_mi:           number | null;
+  /** False when at least one blocker applies. Blocked drivers are ranked last, not hidden. */
+  eligible:              boolean;
+  /** The trailer was actually inspected against a stated requirement. Drives a
+   *  ranking tier of its own: confirmed equipment outranks unverified, even at
+   *  a much greater distance. */
+  equipment_confirmed:   boolean;
+  blockers:              AssignmentVerdict[];
+  warnings:              AssignmentVerdict[];
+  /** Which of the load's stated requirements this driver meets. */
+  matches:               AssignmentVerdict[];
+  active_loads:          AssignmentActiveLoad[];
+}
+
+export interface AssignmentSuggestionResponse {
+  items:    AssignmentSuggestion[];
+  /** Always present when the caller passed `selected` — whether or not they
+   *  survived the filters, and whether or not they also appear in `items`. */
+  selected: AssignmentSuggestion | null;
+}
+
+/**
+ * Fetch driver suggestions ranked against whatever the load form knows so far.
+ *
+ * Every field is optional and nothing is a prerequisite: the backend checks
+ * what it was given and stays quiet about what it wasn't. Pass the form's
+ * current state as-is — blanks are dropped here rather than being sent as
+ * empty requirements, so a half-filled form still produces a useful ranking.
+ */
+export async function apiAssignmentSuggestions(opts: {
+  pickupLat?:      number | null;
+  pickupLng?:      number | null;
+  /** YYYY-MM-DD. With a window, conflicts with a driver's other loads become blockers. */
+  pickupDate?:     string | null;
+  deliveryDate?:   string | null;
+  hazmat?:         boolean;
+  trailerType?:    string | null;
+  /** Any non-empty value marks the freight temperature-controlled. */
+  temperature?:    string | null;
+  weightLbs?:      string | number | null;
+  strapsLoadBars?: string | null;
+  /** Fills in anything omitted from the saved load, and stops that load from
+   *  counting as a conflict with itself when re-assigning. */
+  loadId?:         number | null;
+  /** Drop blocked candidates instead of ranking them last. */
+  strict?:         boolean;
+  limit?:          number;
+  selected?:       number | null;
+}): Promise<AssignmentSuggestionResponse> {
+  const q = new URLSearchParams();
+
+  // Blank, whitespace and null all mean "the dispatcher hasn't said" — never
+  // "requirement is empty string". Dropping them here is what keeps every
+  // field optional end-to-end.
+  const put = (key: string, v: string | number | null | undefined): void => {
+    if (v == null) return;
+    const s = String(v).trim();
+    if (s !== "") q.set(key, s);
+  };
+
+  put("pickup_lat",       opts.pickupLat);
+  put("pickup_lng",       opts.pickupLng);
+  put("pickup_date",      opts.pickupDate);
+  put("delivery_date",    opts.deliveryDate);
+  put("trailer_type",     opts.trailerType);
+  put("temperature",      opts.temperature);
+  put("weight_lbs",       opts.weightLbs);
+  put("straps_load_bars", opts.strapsLoadBars);
+  put("load_id",          opts.loadId);
+  put("limit",            opts.limit);
+  put("selected",         opts.selected);
+  if (opts.hazmat) q.set("hazmat", "1");
+  if (opts.strict) q.set("strict", "1");
+
+  return apiProxy<AssignmentSuggestionResponse>(`assignment/suggestions?${q.toString()}`);
+}
+
+export interface AddressSuggestion {
+  description: string;
+  place_id:    string;
+}
+
+/** Address-fragment autocomplete via the connected map provider. Empty
+ *  array when nothing's connected or query is too short. */
+export async function apiAddressSuggest(query: string): Promise<AddressSuggestion[]> {
+  const q = query.trim();
+  if (q.length < 3) return [];
+  const res = await apiProxy<{ predictions: AddressSuggestion[] }>(
+    `geocode/suggest?q=${encodeURIComponent(q)}`,
+  );
+  return res.predictions ?? [];
+}
+
+export function apiRoute(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  truck?: { lat: number; lng: number } | null,
+): Promise<RouteSummary | null> {
+  return nullOn404(() => apiProxy<RouteSummary>("route", {
+    method: "POST",
+    body:   JSON.stringify({ origin, destination, truck: truck ?? undefined }),
+  }));
+}
+
+/**
+ * `date` is `YYYY-MM-DD`. When both `windowStart` and `windowEnd` (each
+ * `HH:MM`) are provided, the response contains a single window-aggregated
+ * bucket; otherwise 4 time-of-day buckets covering the day.
+ */
+export function apiWeather(
+  lat: number, lng: number, date: string,
+  windowStart?: string | null, windowEnd?: string | null,
+): Promise<WeatherForecast | null> {
+  const q = new URLSearchParams({ lat: String(lat), lng: String(lng), date });
+  if (windowStart && windowEnd) {
+    q.set("window_start", windowStart);
+    q.set("window_end",   windowEnd);
+  }
+  return nullOn404(() => apiProxy<WeatherForecast>(`weather?${q.toString()}`));
+}
+
 // ─── Driver documents (per-slot file uploads) ────────────────────────────────
 
 /**
@@ -391,21 +864,10 @@ export async function apiUploadDriverDocument(
   type: DriverDocumentType,
   file: File,
 ): Promise<DriverDocumentResult> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const res = await fetch(`/api/proxy/driver/${id}/document?documentType=${encodeURIComponent(type)}`, {
-    method: "POST",
-    credentials: "include",
-    body: fd,
-  });
-  const raw = await res.text();
-  const body = raw ? JSON.parse(raw) : null;
-  if (!res.ok) {
-    const msg = (body && typeof body === "object" && "error" in body && typeof body.error === "string")
-      ? body.error
-      : `Upload failed (${res.status})`;
-    throw new ApiError(res.status, msg, body);
-  }
+  const body = await apiUpload(
+    `driver/${id}/document?documentType=${encodeURIComponent(type)}`,
+    file,
+  ) as { data?: DriverDocumentResult } | null;
   return body?.data as DriverDocumentResult;
 }
 
@@ -425,7 +887,7 @@ export async function apiDeleteDriverDocument(
  */
 export function documentUrl(
   imagesHost: string,
-  entity: "drivers" | "trucks" | "trailers",
+  entity: "drivers" | "trucks" | "trailers" | "users" | "companies",
   hash: string | null | undefined,
   size: "60x60" | "200x200" | "400x400" | "full" = "200x200",
 ): string | null {
@@ -442,21 +904,7 @@ export interface TruckImageResult {
 }
 
 export async function apiUploadTruckImage(id: number, file: File): Promise<TruckImageResult> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const res = await fetch(`/api/proxy/truck/${id}/image`, {
-    method: "POST",
-    credentials: "include",
-    body: fd,
-  });
-  const raw = await res.text();
-  const body = raw ? JSON.parse(raw) : null;
-  if (!res.ok) {
-    const msg = (body && typeof body === "object" && "error" in body && typeof body.error === "string")
-      ? body.error
-      : `Upload failed (${res.status})`;
-    throw new ApiError(res.status, msg, body);
-  }
+  const body = await apiUpload(`truck/${id}/image`, file) as { data?: TruckImageResult } | null;
   return body?.data as TruckImageResult;
 }
 
@@ -479,21 +927,10 @@ async function postInspectionUpload(
   type: InspectionType,
   file: File,
 ): Promise<InspectionDocumentResult> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const res = await fetch(`/api/proxy/${entity}/${id}/inspection?inspectionType=${encodeURIComponent(type)}`, {
-    method: "POST",
-    credentials: "include",
-    body: fd,
-  });
-  const raw = await res.text();
-  const body = raw ? JSON.parse(raw) : null;
-  if (!res.ok) {
-    const msg = (body && typeof body === "object" && "error" in body && typeof body.error === "string")
-      ? body.error
-      : `Upload failed (${res.status})`;
-    throw new ApiError(res.status, msg, body);
-  }
+  const body = await apiUpload(
+    `${entity}/${id}/inspection?inspectionType=${encodeURIComponent(type)}`,
+    file,
+  ) as { data?: InspectionDocumentResult } | null;
   return body?.data as InspectionDocumentResult;
 }
 

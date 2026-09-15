@@ -1,31 +1,10 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router";
-import { Truck, Route, ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import { Truck, Route, ChevronLeft, ChevronRight } from "lucide-react";
 import { navSections } from "../lib/nav";
-import { useAuth } from "../lib/auth";
-
-function initialsOf(user: { firstName?: string | null; lastName?: string | null; email?: string } | null): string {
-  if (!user) return "?";
-  const f = (user.firstName ?? "").trim();
-  const l = (user.lastName ?? "").trim();
-  if (f || l) return (f.slice(0, 1) + l.slice(0, 1)).toUpperCase() || "?";
-  const e = (user.email ?? "").trim();
-  return e ? e.slice(0, 2).toUpperCase() : "?";
-}
-
-function displayName(user: { firstName?: string | null; lastName?: string | null; email?: string } | null): string {
-  if (!user) return "Signed out";
-  const name = [(user.firstName ?? "").trim(), (user.lastName ?? "").trim()].filter(Boolean).join(" ");
-  return name || user.email || "Signed in";
-}
-
-function roleLabel(roles: string[] | undefined): string {
-  if (!roles || roles.length === 0) return "Member";
-  if (roles.includes("ROLE_OWNER")) return "Owner";
-  if (roles.includes("ROLE_MANAGER")) return "Manager";
-  if (roles.includes("ROLE_DISPATCHER")) return "Dispatcher";
-  return "Member";
-}
+import { hasRole, useAuth } from "../lib/auth";
+import { roleLabel } from "../lib/roles";
+import { displayName, initialsOf } from "../lib/user";
 
 function getStoredOpen(): boolean {
   try { return localStorage.getItem("sidebar_open") !== "false"; } catch { return true; }
@@ -78,7 +57,7 @@ export default function Sidebar() {
             )}
             <div className="space-y-0.5">
               {section.items.filter(item =>
-                (item.path !== "/company" && item.path !== "/integrations") || user?.roles?.includes("ROLE_OWNER")
+                !item.roles || hasRole(user, item.roles)
               ).map(({ icon: Icon, label, path, badge }) => (
                 <NavLink
                   key={path}
@@ -123,7 +102,7 @@ export default function Sidebar() {
         <div className="p-2">
           {open ? (
             <button
-              onClick={() => navigate("/account")}
+              onClick={() => navigate("/settings/account")}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md hover:bg-sidebar-accent transition-colors text-left group"
             >
               <div className="w-7 h-7 rounded-full bg-primary/25 flex items-center justify-center flex-shrink-0">
@@ -133,12 +112,12 @@ export default function Sidebar() {
                 <p className="text-xs font-semibold text-white truncate leading-tight">{displayName(user)}</p>
                 <p className="text-[10px] font-mono text-sidebar-foreground/60">{roleLabel(user?.roles)}</p>
               </div>
-              <Settings size={12} className="text-sidebar-foreground/40 group-hover:text-sidebar-foreground transition-colors flex-shrink-0" />
+              <ChevronRight size={12} className="text-sidebar-foreground/40 group-hover:text-sidebar-foreground transition-colors flex-shrink-0" />
             </button>
           ) : (
             <button
-              onClick={() => navigate("/account")}
-              title="Account"
+              onClick={() => navigate("/settings/account")}
+              title="My account"
               className="w-full flex justify-center py-2 rounded-md hover:bg-sidebar-accent transition-colors"
             >
               <div className="w-7 h-7 rounded-full bg-primary/25 flex items-center justify-center">

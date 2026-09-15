@@ -234,7 +234,7 @@ function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoadi
           </Select>
           <Field label="Bed Count" value={form.bedCount} type="number" onChange={v => set("bedCount", v)} onBlur={() => onBlur("bedCount")} error={errors.bedCount} />
         </DrawerFieldRow>
-        <div className={`grid gap-4 ${exteriorImage ? "grid-cols-3" : "grid-cols-2"}`}>
+        <DrawerFieldRow cols={exteriorImage ? 3 : 2}>
           <Select label="Cab Type" value={form.cabType} onChange={v => set("cabType", v)}>
             <option value="">— Select —</option>
             {cabTypes.map(v => <option key={v}>{v}</option>)}
@@ -253,7 +253,7 @@ function TruckFormFields({ form, set, errors, onBlur, makes, models, modelsLoadi
               onDelete={exteriorImage.onDelete}
             />
           )}
-        </div>
+        </DrawerFieldRow>
       </DrawerSection>
 
       <DrawerSection title="Specifications">

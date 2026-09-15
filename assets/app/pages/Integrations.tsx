@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
-import { Navigate } from "react-router";
-import { Plug, RefreshCw } from "lucide-react";
-import { useAuth } from "../lib/auth";
+import { RefreshCw } from "lucide-react";
 import { useRefData, type IntegrationDef } from "../lib/data";
-import { SlideDrawer, DrawerSection, DrawerField, Btn } from "../lib/ui";
+import { SlideDrawer, DrawerSection, DrawerField, DrawerCell, Btn } from "../lib/ui";
 import {
   apiGetIntegrationStatus, apiSaveIntegration, apiDeleteIntegration,
   ApiError,
@@ -52,7 +50,6 @@ function IntegrationCard({ integration, onClick }: {
 }
 
 export default function Integrations() {
-  const { user } = useAuth();
   const { data: refData, loading: refLoading } = useRefData();
 
   const [status, setStatus]   = useState<Record<string, boolean>>({});
@@ -65,11 +62,6 @@ export default function Integrations() {
   const [form,       setForm]       = useState<Record<string, string>>({});
   const [saving,     setSaving]     = useState(false);
   const [deleting,   setDeleting]   = useState(false);
-
-  // Owner guard — placed after all hooks
-  if (user && !user.roles?.includes("ROLE_OWNER")) {
-    return <Navigate to="/dashboard" replace />;
-  }
 
   async function loadStatus() {
     setLoading(true);
@@ -178,17 +170,7 @@ export default function Integrations() {
 
   return (
     <>
-      <div className="max-w-4xl mx-auto flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-md bg-primary/15 border border-primary/25 flex items-center justify-center flex-shrink-0">
-            <Plug size={16} className="text-primary" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-foreground leading-none">Integrations</h1>
-            <p className="text-xs font-mono text-muted-foreground mt-1">Connect external services to your fleet</p>
-          </div>
-        </div>
-
+      <div className="flex flex-col gap-4">
         {toast && (
           <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-mono ${toast.ok ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400" : "bg-red-500/10 border border-red-500/25 text-red-400"}`}>
             {toast.msg}
@@ -228,27 +210,29 @@ export default function Integrations() {
         {selected && (
           <DrawerSection title="Credentials">
             {selected.connected && (
-              <p className="text-xs font-mono text-muted-foreground">
-                Leave a field blank to keep the current value.
-              </p>
+              <DrawerCell>
+                <p className="text-[11px] font-mono text-muted-foreground">
+                  Leave a field blank to keep the current value.
+                </p>
+              </DrawerCell>
             )}
             {selected.fields.map(f => (
               <DrawerField
                 key={f.key}
-                label={f.label + (f.required ? " *" : "")}
+                label={f.label}
+                required={f.required}
                 value={form[f.key] ?? ""}
                 type={f.type}
                 mono={f.type === "password"}
                 onChange={v => setField(f.key, v)}
-                hint={selected.connected ? undefined : f.required ? "Required" : undefined}
               />
             ))}
             {selected.connected && (
-              <div className="pt-4">
+              <DrawerCell>
                 <Btn variant="danger" onClick={handleDisconnect} disabled={saving || deleting}>
                   {deleting ? "Disconnecting…" : "Disconnect"}
                 </Btn>
-              </div>
+              </DrawerCell>
             )}
           </DrawerSection>
         )}

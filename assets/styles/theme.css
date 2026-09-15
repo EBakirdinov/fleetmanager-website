@@ -2,8 +2,12 @@
 
 :root {
   --font-size: 15px;
-  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* Self-hosted; see assets/styles/fonts.css. IBM Plex Sans is drawn for technical
+     products: at the same size it sets ~20% more text per line than Plus
+     Jakarta Sans did, with digits that can't be mistaken for each other —
+     both of which matter in a screen full of VINs, plates and mileage. */
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
   --background: #f0f2f6;
   --foreground: #0f1923;
   --card: #ffffff;
@@ -33,6 +37,17 @@
   --chart-4: #7c3aed;
   --chart-5: #dc2626;
   --radius: 0.375rem;
+
+  /* Spec-sheet cell metrics (lib/cells.tsx). Any container can scale the
+     whole kit by overriding these — the side drawer runs a roomier set
+     because it has the width to spend, while the Load page's three-up
+     columns do not. */
+  --cell-px: 0.875rem;
+  --cell-py: 0.625rem;
+  --cell-fs: 0.875rem;
+  --cell-label-fs: 11px;
+  --cell-hint-fs: 10px;
+  --cell-title-fs: 0.875rem;
   --sidebar: #1a2540;
   --sidebar-foreground: #94a3b8;
   --sidebar-primary: #f59e0b;
@@ -125,6 +140,42 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+@layer components {
+  /*
+   * Thin scrollbar for in-page scrollers. The default macOS overlay bar is
+   * invisible until you scroll, which leaves a clipped list looking broken
+   * rather than scrollable — this one is always there, just quiet.
+   *
+   * The two engines are handled separately on purpose: Chrome 121+ supports
+   * the standard `scrollbar-width`, and setting it *disables* the
+   * ::-webkit-scrollbar pseudo-elements, handing the bar back to the OS —
+   * which on macOS means an overlay that reserves no space and shows nothing
+   * at rest. So webkit gets the pseudo-elements, and the standard properties
+   * are scoped to engines that have no pseudo-elements to begin with.
+   */
+  .scroll-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+    border-radius: 999px;
+  }
+  .scroll-thin:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+  }
+
+  @supports not selector(::-webkit-scrollbar) {
+    .scroll-thin {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -133,6 +184,7 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
   }
 
   html {

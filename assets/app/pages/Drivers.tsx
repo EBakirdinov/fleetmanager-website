@@ -6,7 +6,7 @@ import {
   KpiCard, StatusPill, Btn, SlideDrawer, DrawerSection, DrawerFieldRow,
   DrawerField as Field, DrawerSelect as Select, DrawerFieldRow as FieldRow,
   DrawerTextarea as Textarea, CodeToggle as EndorsementToggle, DrawerFileField,
-  ActionsMenu,
+  DrawerCell, ActionsMenu,
 } from "../lib/ui";
 import {
   apiListDrivers, apiCreateDriver, apiUpdateDriver, apiDeleteDriver, ApiError, type DriverItem,
@@ -255,24 +255,26 @@ function DriverFormFields({
       </DrawerSection>
 
       <DrawerSection title="Endorsements">
-        <div className="flex gap-1.5">
-          <EndorsementToggle code="T/T" label="Doubles/Triples" active={form.endorsementDoublesTriples} onToggle={() => toggle("endorsementDoublesTriples")} />
-          <EndorsementToggle code="H"   label="Hazardous"       active={form.endorsementHazardous}       onToggle={() => toggle("endorsementHazardous")} />
-          <EndorsementToggle code="N"   label="Tanker"          active={form.endorsementTanker}          onToggle={() => toggle("endorsementTanker")} />
-          <EndorsementToggle code="P"   label="Passenger"       active={form.endorsementPassenger}       onToggle={() => toggle("endorsementPassenger")} />
-          <EndorsementToggle code="S"   label="School Bus"      active={form.endorsementSchool}          onToggle={() => toggle("endorsementSchool")} />
-          <EndorsementToggle code="X"   label="Tank Vehicle"    active={form.endorsementTank}            onToggle={() => toggle("endorsementTank")} />
-        </div>
-        <p className="text-xs font-mono text-muted-foreground">
-          {[
-            form.endorsementDoublesTriples && "Doubles/Triples",
-            form.endorsementHazardous && "Hazardous",
-            form.endorsementTanker && "Tanker",
-            form.endorsementPassenger && "Passenger",
-            form.endorsementSchool && "School Bus",
-            form.endorsementTank && "Tank Vehicle",
-          ].filter(Boolean).join(", ") || "None selected"}
-        </p>
+        <DrawerCell>
+          <div className="flex gap-1.5">
+            <EndorsementToggle code="T/T" label="Doubles/Triples" active={form.endorsementDoublesTriples} onToggle={() => toggle("endorsementDoublesTriples")} />
+            <EndorsementToggle code="H"   label="Hazardous"       active={form.endorsementHazardous}       onToggle={() => toggle("endorsementHazardous")} />
+            <EndorsementToggle code="N"   label="Tanker"          active={form.endorsementTanker}          onToggle={() => toggle("endorsementTanker")} />
+            <EndorsementToggle code="P"   label="Passenger"       active={form.endorsementPassenger}       onToggle={() => toggle("endorsementPassenger")} />
+            <EndorsementToggle code="S"   label="School Bus"      active={form.endorsementSchool}          onToggle={() => toggle("endorsementSchool")} />
+            <EndorsementToggle code="X"   label="Tank Vehicle"    active={form.endorsementTank}            onToggle={() => toggle("endorsementTank")} />
+          </div>
+          <p className="text-[10px] font-mono text-muted-foreground/70 mt-2">
+            {[
+              form.endorsementDoublesTriples && "Doubles/Triples",
+              form.endorsementHazardous && "Hazardous",
+              form.endorsementTanker && "Tanker",
+              form.endorsementPassenger && "Passenger",
+              form.endorsementSchool && "School Bus",
+              form.endorsementTank && "Tank Vehicle",
+            ].filter(Boolean).join(", ") || "None selected"}
+          </p>
+        </DrawerCell>
       </DrawerSection>
 
       <DrawerSection title="Medical Certification">
@@ -782,7 +784,7 @@ export default function Drivers() {
           form={form} set={set} toggle={toggle} errors={errors} onBlur={handleBlur} trucks={truckOptions}
           documentsSlot={drawerMode === "edit" && selected && (
             <DrawerSection title="Documents">
-              <div className="grid grid-cols-3 gap-x-3 gap-y-3">
+              <DrawerFieldRow cols={3}>
                 {DOCUMENT_SLOTS.map(slot => (
                   <DrawerFileField
                     key={slot.type}
@@ -794,7 +796,7 @@ export default function Drivers() {
                     onDelete={() => handleDeleteDocument(slot.type)}
                   />
                 ))}
-              </div>
+              </DrawerFieldRow>
             </DrawerSection>
           )}
         />

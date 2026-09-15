@@ -4,7 +4,7 @@ import { Container, CheckCircle, AlertCircle, Pencil, Plus, Trash2 } from "lucid
 import {
   KpiCard, Btn, SlideDrawer, DrawerSection, DrawerFieldRow,
   DrawerField as Field, DrawerSelect as Select, DrawerFieldRow as FieldRow, ToggleButton as Toggle,
-  DrawerTextarea as Textarea, ActionsMenu, DrawerFileField,
+  DrawerTextarea as Textarea, DrawerCell, ActionsMenu, DrawerFileField,
 } from "../lib/ui";
 import {
   apiListTrailers, apiCreateTrailer, apiUpdateTrailer, apiDeleteTrailer, ApiError, type TrailerItem,
@@ -297,8 +297,7 @@ function TrailerFormFields({
             {frontMaterials.map(v => <option key={v}>{v}</option>)}
           </Select>
         </DrawerFieldRow>
-        <div>
-          <label className="text-xs font-mono text-muted-foreground tracking-wider uppercase mb-2 block">Additional Features</label>
+        <DrawerCell label="Additional Features">
           <div className="flex flex-wrap gap-2">
             <Toggle label="Air Ride"       active={form.airRideSuspension} onToggle={() => setBool("airRideSuspension", !form.airRideSuspension)} />
             <Toggle label="Sliding Tandem" active={form.slidingTandem}     onToggle={() => setBool("slidingTandem",     !form.slidingTandem)} />
@@ -309,7 +308,7 @@ function TrailerFormFields({
             <Toggle label="Thermo King"    active={form.thermoKingUnit}    onToggle={() => setBool("thermoKingUnit",    !form.thermoKingUnit)} />
             <Toggle label="Hazmat"         active={form.hazmatCertified}   onToggle={() => setBool("hazmatCertified",   !form.hazmatCertified)} />
           </div>
-        </div>
+        </DrawerCell>
       </DrawerSection>
 
       <DrawerSection title="Operational Information">

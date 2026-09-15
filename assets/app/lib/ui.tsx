@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ChangeEvent, ElementType, ReactNode } from "react";
-import { Calendar, Check, FileUp, MoreVertical, Save, Trash2, X } from "lucide-react";
+import { Check, FileUp, Loader2, MoreVertical, Save, Trash2, Upload, X } from "lucide-react";
+import {
+  Sheet, SheetHeader, Row, Cell, TextCell, SelectCell, TextareaCell, bandCls, formMetrics,
+} from "./cells";
 
 export function KpiCard({ label, value, sub, icon: Icon, accent, active, onClick }: {
   label: string;
@@ -106,7 +109,7 @@ export function SlideDrawer({ open, onClose, title, badge, titleExtra, children,
         onClick={onClose}
       />
       <div
-        className={`fixed top-0 right-0 h-full w-[480px] bg-card border-l border-border z-50 flex flex-col transition-transform duration-200 ${open ? "translate-x-0" : "translate-x-full"}`}
+        className={`fixed top-0 right-0 h-full w-[680px] max-w-[94vw] bg-card border-l border-border z-50 flex flex-col transition-transform duration-200 ${open ? "translate-x-0" : "translate-x-full"}`}
         style={{ boxShadow: open ? "-8px 0 32px rgba(0,0,0,0.35)" : "none" }}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
@@ -123,7 +126,7 @@ export function SlideDrawer({ open, onClose, title, badge, titleExtra, children,
             <X size={14} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        <div className="flex-1 overflow-y-auto scroll-thin px-6 py-6 space-y-6" style={formMetrics}>
           {children}
         </div>
         {(onSave || onDelete) && (
@@ -152,15 +155,82 @@ export function SlideDrawer({ open, onClose, title, badge, titleExtra, children,
   );
 }
 
+/**
+ * A titled sheet inside a drawer. Every direct child becomes a hairline-
+ * separated band: a DrawerFieldRow pairs two cells, a bare field spans the
+ * full width. The shared cell kit in lib/cells.tsx does the rest, so drawer
+ * forms and the Load page sections look and behave the same.
+ */
+/**
+ * A scroller that admits it is one.
+ *
+ * A bare overflow-y-auto slices its last card in half with no indication that
+ * anything is below — and on macOS the overlay scrollbar is invisible until
+ * you actually scroll, so the clipped edge reads as a rendering bug. This
+ * keeps a thin bar visible and fades the content out at whichever edge has
+ * more beyond it, so the cut always looks deliberate.
+ */
+export function ScrollArea({ children, className = "", fadeHeight = 24 }: {
+  children: ReactNode;
+  className?: string;
+  /** Height of the fade in px. Smaller for short lists. */
+  fadeHeight?: number;
+}) {
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const content  = useRef<HTMLDivElement | null>(null);
+  const [edge, setEdge] = useState({ top: false, bottom: false });
+
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+
+    // 2px of slack: sub-pixel layout means scrollTop rarely lands on an exact
+    // 0 or max, and a fade that flickers at rest is worse than no fade.
+    const measure = () => {
+      const max = el.scrollHeight - el.clientHeight;
+      setEdge({ top: el.scrollTop > 2, bottom: max > 2 && el.scrollTop < max - 2 });
+    };
+
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+
+    // The scroller's own box doesn't change when its contents grow, so the
+    // observer watches the content wrapper instead.
+    const ro = new ResizeObserver(measure);
+    if (content.current) ro.observe(content.current);
+    ro.observe(el);
+
+    return () => {
+      el.removeEventListener("scroll", measure);
+      ro.disconnect();
+    };
+  }, []);
+
+  return (
+    <div className="relative flex-1 min-h-0">
+      <div ref={scroller} className={`h-full overflow-y-auto scroll-thin ${className}`}>
+        <div ref={content}>{children}</div>
+      </div>
+      <div
+        aria-hidden
+        style={{ height: fadeHeight }}
+        className={`pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-card to-transparent transition-opacity duration-150 ${edge.top ? "opacity-100" : "opacity-0"}`}
+      />
+      <div
+        aria-hidden
+        style={{ height: fadeHeight }}
+        className={`pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-card to-transparent transition-opacity duration-150 ${edge.bottom ? "opacity-100" : "opacity-0"}`}
+      />
+    </div>
+  );
+}
+
 export function DrawerSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="border-t border-border pt-5 first:border-t-0 first:pt-0">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-1 h-4 bg-primary rounded-full" />
-        <h3 className="text-sm font-semibold text-foreground tracking-tight">{title}</h3>
-      </div>
-      <div className="space-y-3">{children}</div>
-    </div>
+    <Sheet>
+      <SheetHeader lead={<div className="w-1 h-4 bg-primary rounded-full" />} title={title} />
+      {children}
+    </Sheet>
   );
 }
 
@@ -179,144 +249,12 @@ export function DrawerField({ label, value, type = "text", hint, readOnly, mono,
   onBlur?: () => void;
   error?: string | null;
 }) {
-  const borderClass = error
-    ? "border-red-500/60 focus:ring-red-500/50"
-    : "border-border focus:ring-ring";
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-mono text-muted-foreground tracking-wider uppercase">
-        {label}{required && <span className="text-red-400 ml-1">*</span>}
-      </label>
-      {type === "date"
-        ? (
-          <MaskedDateInput
-            value={value}
-            max={max}
-            min={min}
-            readOnly={readOnly}
-            onChange={v => onChange?.(v)}
-            onBlur={onBlur}
-            borderClass={borderClass}
-          />
-        )
-        : (
-          <input
-            type={type}
-            value={value}
-            readOnly={readOnly}
-            maxLength={maxLength}
-            max={max}
-            min={min}
-            onChange={e => onChange?.(e.target.value)}
-            onBlur={onBlur}
-            className={`bg-input-background text-foreground border ${borderClass} rounded px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 transition-colors ${mono ? "font-mono" : ""} ${readOnly ? "opacity-50 cursor-not-allowed select-all" : ""}`}
-          />
-        )
-      }
-      {error
-        ? <p className="text-xs font-mono text-red-400">{error}</p>
-        : hint && <p className="text-xs font-mono text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
-
-// Convert stored ISO ("YYYY-MM-DD") to display ("MM/DD/YYYY").
-function isoToDisplay(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  return m ? `${m[2]}/${m[3]}/${m[1]}` : "";
-}
-
-// Parse display ("MM/DD/YYYY") back to ISO. Returns "" if invalid.
-function displayToIso(display: string): string {
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(display);
-  if (!m) return "";
-  const mm = parseInt(m[1], 10), dd = parseInt(m[2], 10), yyyy = parseInt(m[3], 10);
-  if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900 || yyyy > 2100) return "";
-  const d = new Date(yyyy, mm - 1, dd);
-  if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return "";
-  return `${m[3]}-${m[1]}-${m[2]}`;
-}
-
-// Insert slashes as the user types so the value always reads MM/DD/YYYY.
-function autoSlash(raw: string): string {
-  const digits = raw.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-}
-
-/**
- * Date input that always renders MM/DD/YYYY regardless of browser/OS locale.
- * Stores its value as ISO ("YYYY-MM-DD") for API consumption. The visible
- * field is our masked text input; a native <input type="date"> is overlaid
- * on the calendar-icon area (opacity 0) so clicking the icon opens the OS
- * date picker anchored at that location and typing still goes into the
- * masked text field.
- */
-function MaskedDateInput({ value, max, min, readOnly, onChange, onBlur, borderClass }: {
-  value: string;
-  max?: string;
-  min?: string;
-  readOnly?: boolean;
-  onChange: (iso: string) => void;
-  onBlur?: () => void;
-  borderClass: string;
-}) {
-  const [text, setText] = useState(() => isoToDisplay(value));
-
-  useEffect(() => { setText(isoToDisplay(value)); }, [value]);
-
-  function isoInRange(iso: string): boolean {
-    if (max && iso > max) return false;
-    if (min && iso < min) return false;
-    return true;
-  }
-
-  function handleText(raw: string) {
-    const masked = autoSlash(raw);
-    setText(masked);
-    if (!masked) { onChange(""); return; }
-    const iso = displayToIso(masked);
-    // Only commit fully-typed, in-range dates. Partial or out-of-range
-    // typing lingers in the text field until blur snaps it back.
-    if (iso && isoInRange(iso)) onChange(iso);
-  }
-
-  function handleBlur() {
-    // Reset display to the canonical form of the committed value so a
-    // half-typed or out-of-range entry doesn't linger in the field.
-    setText(isoToDisplay(value));
-    onBlur?.();
-  }
-
-  return (
-    <div className="relative">
-      <input
-        type="text"
-        inputMode="numeric"
-        value={text}
-        placeholder="MM/DD/YYYY"
-        readOnly={readOnly}
-        maxLength={10}
-        onChange={e => handleText(e.target.value)}
-        onBlur={handleBlur}
-        className={`bg-input-background text-foreground border ${borderClass} rounded pl-3 pr-9 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 transition-colors font-mono w-full ${readOnly ? "opacity-50 cursor-not-allowed" : ""}`}
-      />
-      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
-        <Calendar size={14} />
-      </span>
-      <input
-        type="date"
-        value={value}
-        max={max}
-        min={min}
-        disabled={readOnly}
-        onChange={e => onChange(e.target.value)}
-        aria-label="Pick date"
-        tabIndex={-1}
-        className="absolute right-0 top-0 h-full w-9 opacity-0 cursor-pointer disabled:cursor-not-allowed"
-      />
-    </div>
+    <TextCell
+      label={label} value={value} type={type} hint={hint} error={error}
+      readOnly={readOnly} mono={mono} maxLength={maxLength} max={max} min={min}
+      required={required} onChange={onChange} onBlur={onBlur}
+    />
   );
 }
 
@@ -328,23 +266,10 @@ export function DrawerSelect({ label, value, onChange, children, required, error
   required?: boolean;
   error?: string | null;
 }) {
-  const borderClass = error
-    ? "border-red-500/60 focus:ring-red-500/50"
-    : "border-border focus:ring-ring";
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-mono text-muted-foreground tracking-wider uppercase">
-        {label}{required && <span className="text-red-400 ml-1">*</span>}
-      </label>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className={`bg-input-background text-foreground border ${borderClass} rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 transition-colors appearance-none`}
-      >
-        {children}
-      </select>
-      {error && <p className="text-xs font-mono text-red-400">{error}</p>}
-    </div>
+    <SelectCell label={label} value={value} onChange={onChange} required={required} error={error}>
+      {children}
+    </SelectCell>
   );
 }
 
@@ -355,22 +280,19 @@ export function DrawerTextarea({ label, value, onChange, rows = 3, hint }: {
   rows?: number;
   hint?: string;
 }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-mono text-muted-foreground tracking-wider uppercase">{label}</label>
-      <textarea
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        rows={rows}
-        className="bg-input-background text-foreground border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring transition-colors resize-none"
-      />
-      {hint && <p className="text-xs font-mono text-muted-foreground">{hint}</p>}
-    </div>
-  );
+  return <TextareaCell label={label} value={value} onChange={onChange} rows={rows} hint={hint} />;
 }
 
-export function DrawerFieldRow({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-4">{children}</div>;
+/**
+ * A labelled band for controls the field types don't cover — toggle groups,
+ * pill rows, anything bespoke. Same surface, hover and focus behaviour as a
+ * regular field cell.
+ */
+export { Cell as DrawerCell } from "./cells";
+
+/** Cells on one band, split by hairlines. Two per band unless told otherwise. */
+export function DrawerFieldRow({ children, cols }: { children: ReactNode; cols?: 1 | 2 | 3 | 4 }) {
+  return <Row cols={cols}>{children}</Row>;
 }
 
 export function ToggleButton({ label, active, onToggle }: {
@@ -438,11 +360,8 @@ export function DrawerFileField({
   }
 
   return (
-    <div className="flex flex-col gap-1" title={hint ?? label}>
-      <label className="text-xs font-mono text-muted-foreground tracking-wider uppercase truncate">
-        {label}
-      </label>
-      <div className="relative">
+    <Cell label={label} as="div">
+      <div className="relative" title={hint ?? label}>
         <button
           type="button"
           onClick={pick}
@@ -473,7 +392,7 @@ export function DrawerFileField({
           href={imageUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-center text-[10px] font-mono font-semibold tracking-wider uppercase text-primary hover:text-primary/80 transition-colors"
+          className="block text-center text-[10px] font-mono font-semibold tracking-wider uppercase text-primary hover:text-primary/80 transition-colors mt-1"
         >
           View
         </a>
@@ -482,6 +401,80 @@ export function DrawerFileField({
         ref={inputRef}
         type="file"
         accept={accept}
+        className="hidden"
+        onChange={onChange}
+        disabled={busy}
+      />
+    </Cell>
+  );
+}
+
+/**
+ * The photo that stands for a person or a company.
+ *
+ * Deliberately not a DrawerFileField: a document tile only has to say
+ * "attached" or "not attached", while an avatar has to show the actual image
+ * at the size it will be seen. Uploads land immediately rather than joining a
+ * draft — a file picker has nothing meaningful to cancel back to, and making
+ * the user press Save after choosing a photo only invites them to walk away
+ * believing it was kept.
+ */
+export function ImageUploadField({
+  shape, imageUrl, fallback, busy = false, hint, onUpload, onRemove,
+}: {
+  shape: "round" | "square";
+  imageUrl: string | null;
+  /** Initials shown while there is no image. */
+  fallback: string;
+  busy?: boolean;
+  hint?: string;
+  onUpload: (file: File) => void;
+  onRemove?: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const radius = shape === "round" ? "rounded-full" : "rounded-lg";
+
+  function onChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) onUpload(file);
+    // Reset so picking the same file twice still fires a change.
+    e.target.value = "";
+  }
+
+  return (
+    <div className={`${bandCls} flex items-center gap-4`}>
+      <div
+        className={`relative w-16 h-16 flex-shrink-0 ${radius} border border-border bg-muted/40 overflow-hidden flex items-center justify-center`}
+      >
+        {imageUrl
+          ? <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+          : <span className="text-lg font-semibold text-muted-foreground">{fallback}</span>}
+        {busy && (
+          <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
+            <Loader2 size={16} className="animate-spin text-primary" />
+          </div>
+        )}
+      </div>
+
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Btn variant="outline" onClick={() => { if (!busy) inputRef.current?.click(); }} disabled={busy}>
+            <Upload size={11} className="inline mr-1.5" />
+            {imageUrl ? "Replace" : "Upload"}
+          </Btn>
+          {imageUrl && onRemove && (
+            <Btn variant="ghost" onClick={onRemove} disabled={busy}>Remove</Btn>
+          )}
+        </div>
+        {hint && (
+          <p className="text-[length:var(--cell-hint-fs)] font-mono text-muted-foreground/75 mt-2">{hint}</p>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
         className="hidden"
         onChange={onChange}
         disabled={busy}

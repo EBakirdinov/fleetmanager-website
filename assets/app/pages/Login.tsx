@@ -38,7 +38,7 @@ export default function Login() {
   return (
     <div
       className="flex items-center justify-center h-full w-full bg-background text-foreground p-6"
-      style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+      style={{ fontFamily: "var(--font-sans)" }}
     >
       <div className="w-full max-w-sm bg-card border border-border rounded-md p-6 shadow-lg">
         <div className="flex items-center gap-2.5 mb-5">
