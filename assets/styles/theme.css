@@ -38,16 +38,20 @@
   --chart-5: #dc2626;
   --radius: 0.375rem;
 
-  /* Spec-sheet cell metrics (lib/cells.tsx). Any container can scale the
-     whole kit by overriding these — the side drawer runs a roomier set
-     because it has the width to spend, while the Load page's three-up
-     columns do not. */
+  /* Form kit metrics (lib/cells.tsx). Any container can scale the whole kit
+     by overriding these — the side drawer runs a roomier set because it has
+     the width to spend, while a table's inline cells do not.
+
+     cell-* size the label/value type and the padding of non-field bands;
+     field-* size the bordered shell a control sits in. */
   --cell-px: 0.875rem;
   --cell-py: 0.625rem;
   --cell-fs: 0.875rem;
   --cell-label-fs: 11px;
   --cell-hint-fs: 10px;
   --cell-title-fs: 0.875rem;
+  --field-px: 0.625rem;
+  --field-h: 2.25rem;
   --sidebar: #1a2540;
   --sidebar-foreground: #94a3b8;
   --sidebar-primary: #f59e0b;

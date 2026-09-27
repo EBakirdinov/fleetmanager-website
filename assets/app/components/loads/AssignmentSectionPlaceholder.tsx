@@ -15,6 +15,7 @@ export default function AssignmentSectionPlaceholder() {
       n={5}
       color="#8b5cf6"
       title="Assignment (Dispatch)"
+      bare
       meta={<span className={`${captionCls} flex-shrink-0`}>Coming soon</span>}
     >
       <div className="px-4 py-5 flex flex-col items-center gap-2 text-center">

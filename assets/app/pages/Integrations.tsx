@@ -1,15 +1,32 @@
 import { useState, useEffect } from "react";
-import { RefreshCw } from "lucide-react";
-import { useRefData, type IntegrationDef } from "../lib/data";
-import { SlideDrawer, DrawerSection, DrawerField, DrawerCell, Btn } from "../lib/ui";
+import { RefreshCw, Check, X } from "lucide-react";
+import { useRefData, type IntegrationDef, type IntegrationField } from "../lib/data";
+import { SlideDrawer, DrawerSection, DrawerField, DrawerCell, Btn, Switch } from "../lib/ui";
 import {
   apiGetIntegrationStatus, apiSaveIntegration, apiDeleteIntegration,
-  ApiError,
+  apiGetIntegrationConfig, apiTestIntegration,
+  ApiError, type IntegrationProbeResult,
 } from "../lib/api";
 import { IntegrationIcon } from "../lib/integrationIcons";
 
 interface IntegrationView extends IntegrationDef {
   connected: boolean;
+}
+
+/** Credentials are typed in; everything else is a setting with a state. */
+type FieldValue = string | boolean;
+
+function isSetting(f: IntegrationField): boolean {
+  return f.type === "checkbox";
+}
+
+/**
+ * Name a probe result after the field it corresponds to, so the verdict reads
+ * in the same words as the toggle above it. Falls back to the raw key for a
+ * capability the catalog has no field for.
+ */
+function labelFor(integration: IntegrationView, key: string): string {
+  return integration.fields.find(f => f.key === key)?.label ?? key;
 }
 
 function IntegrationCard({ integration, onClick }: {
@@ -59,9 +76,12 @@ export default function Integrations() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selected,   setSelected]   = useState<IntegrationView | null>(null);
-  const [form,       setForm]       = useState<Record<string, string>>({});
+  const [form,       setForm]       = useState<Record<string, FieldValue>>({});
   const [saving,     setSaving]     = useState(false);
   const [deleting,   setDeleting]   = useState(false);
+
+  const [testing, setTesting] = useState(false);
+  const [probe,   setProbe]   = useState<Record<string, IntegrationProbeResult> | null>(null);
 
   async function loadStatus() {
     setLoading(true);
@@ -87,31 +107,92 @@ export default function Integrations() {
     setTimeout(() => setToast(null), 3000);
   }
 
-  function openDrawer(integration: IntegrationView) {
+  async function openDrawer(integration: IntegrationView) {
     setSelected(integration);
-    const initial: Record<string, string> = {};
-    for (const f of integration.fields) initial[f.key] = "";
+    setProbe(null);
+
+    // Credentials start blank — they're write-only from here, and a blank
+    // means "keep what's stored". Settings have to start at their real
+    // value instead: a toggle that always opened "on" would misreport the
+    // state, and saving would then write that misreport back.
+    const initial: Record<string, FieldValue> = {};
+    for (const f of integration.fields) {
+      initial[f.key] = isSetting(f) ? defaultValue(f) : "";
+    }
     setForm(initial);
     setDrawerOpen(true);
+
+    if (!integration.connected) return;
+
+    try {
+      const stored = await apiGetIntegrationConfig<Record<string, unknown>>(integration.slug);
+      if (!stored) return;
+
+      setForm(prev => {
+        const next = { ...prev };
+        for (const f of integration.fields) {
+          if (!isSetting(f) || !(f.key in stored)) continue;
+          next[f.key] = stored[f.key] !== false;
+        }
+        return next;
+      });
+    } catch {
+      // Not fatal — the drawer still works, the toggles just show defaults.
+    }
   }
 
   function closeDrawer() {
-    if (saving || deleting) return;
+    if (saving || deleting || testing) return;
     setDrawerOpen(false);
     setSelected(null);
     setForm({});
+    setProbe(null);
   }
 
-  function setField(key: string, value: string) {
+  function setField(key: string, value: FieldValue) {
     setForm(p => ({ ...p, [key]: value }));
+  }
+
+  /** What a toggle reads as before anything is stored for it. */
+  function defaultValue(f: IntegrationField): FieldValue {
+    return f.default !== false;
+  }
+
+  /**
+   * What goes to the server: every setting every time, and credentials only
+   * when they were actually typed into. A blank credential means "keep the
+   * stored one", and the backend merges rather than replaces.
+   */
+  function payloadFrom(integration: IntegrationView): Record<string, FieldValue> {
+    const payload: Record<string, FieldValue> = {};
+    for (const f of integration.fields) {
+      const v = form[f.key];
+      if (isSetting(f)) {
+        if (typeof v === "boolean") payload[f.key] = v;
+      } else if (typeof v === "string" && v.trim() !== "") {
+        payload[f.key] = v;
+      }
+    }
+
+    return payload;
+  }
+
+  async function handleTest() {
+    if (!selected) return;
+    setTesting(true);
+    setProbe(null);
+    try {
+      setProbe(await apiTestIntegration(selected.slug, payloadFrom(selected)));
+    } catch (e) {
+      showToast(false, e instanceof ApiError ? e.message : "Test failed");
+    } finally {
+      setTesting(false);
+    }
   }
 
   async function handleSave() {
     if (!selected) return;
-    const payload: Record<string, string> = {};
-    for (const [k, v] of Object.entries(form)) {
-      if (v.trim() !== "") payload[k] = v;
-    }
+    const payload = payloadFrom(selected);
 
     if (!selected.connected) {
       const missing = selected.fields.filter(f => f.required && !payload[f.key]);
@@ -132,6 +213,7 @@ export default function Integrations() {
       setDrawerOpen(false);
       setSelected(null);
       setForm({});
+      setProbe(null);
     } catch (e) {
       showToast(false, e instanceof ApiError ? e.message : "Save failed. Please try again.");
     } finally {
@@ -216,24 +298,89 @@ export default function Integrations() {
                 </p>
               </DrawerCell>
             )}
-            {selected.fields.map(f => (
+            {selected.fields.filter(f => !isSetting(f)).map(f => (
               <DrawerField
                 key={f.key}
                 label={f.label}
                 required={f.required}
-                value={form[f.key] ?? ""}
+                hint={f.hint}
+                value={typeof form[f.key] === "string" ? (form[f.key] as string) : ""}
                 type={f.type}
                 mono={f.type === "password"}
                 onChange={v => setField(f.key, v)}
               />
             ))}
-            {selected.connected && (
-              <DrawerCell>
-                <Btn variant="danger" onClick={handleDisconnect} disabled={saving || deleting}>
-                  {deleting ? "Disconnecting…" : "Disconnect"}
+
+            <DrawerCell>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Btn variant="outline" onClick={handleTest} disabled={saving || deleting || testing}>
+                  {testing ? "Testing…" : "Test connection"}
                 </Btn>
+                <span className="text-[11px] font-mono text-muted-foreground">
+                  Asks the provider what this key can actually do.
+                </span>
+              </div>
+            </DrawerCell>
+
+            {probe && (
+              <DrawerCell>
+                <div className="flex flex-col gap-1.5">
+                  {Object.entries(probe).map(([key, r]) => (
+                    <div key={key} className="flex items-start gap-2 text-[11px] font-mono">
+                      {r.ok
+                        ? <Check size={13} className="text-emerald-400 flex-shrink-0 mt-px" />
+                        : <X     size={13} className="text-red-400     flex-shrink-0 mt-px" />}
+                      <span className="text-muted-foreground">
+                        <span className="text-foreground">{labelFor(selected, key)}</span>
+                        {" — "}{r.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </DrawerCell>
             )}
+          </DrawerSection>
+        )}
+
+        {selected && selected.fields.some(isSetting) && (
+          <DrawerSection title="Enabled APIs">
+            <DrawerCell>
+              <p className="text-[11px] font-mono text-muted-foreground">
+                Google enables and bills each of these separately. Turn off what this
+                key doesn't have so the app stops asking for it.
+              </p>
+            </DrawerCell>
+
+            {selected.fields.filter(isSetting).map(f => (
+              <DrawerCell key={f.key}>
+                <div className="flex items-start gap-3">
+                  <Switch
+                    checked={form[f.key] !== false}
+                    onChange={next => setField(f.key, next)}
+                    label={f.label}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-foreground leading-tight">{f.label}</p>
+                    {f.hint && (
+                      <p className="text-[11px] font-mono text-muted-foreground/70 mt-1 leading-relaxed">
+                        {f.hint}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </DrawerCell>
+            ))}
+
+          </DrawerSection>
+        )}
+
+        {selected?.connected && (
+          <DrawerSection title="Danger zone">
+            <DrawerCell>
+              <Btn variant="danger" onClick={handleDisconnect} disabled={saving || deleting}>
+                {deleting ? "Disconnecting…" : "Disconnect"}
+              </Btn>
+            </DrawerCell>
           </DrawerSection>
         )}
       </SlideDrawer>

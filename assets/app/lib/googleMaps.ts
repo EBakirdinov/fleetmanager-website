@@ -50,6 +50,11 @@ export interface GOverlayCtor {
 export interface GMarker {
   setMap(m: GMap | null): void;
   setPosition(pos: GLatLngLit | GLatLng): void;
+  /** Repainting an existing marker rather than rebuilding it — the load map
+   *  keys its stop markers by position in the run, so a stop removed from the
+   *  middle re-letters every marker after it. */
+  setIcon(icon: string | { url?: string; scaledSize?: unknown }): void;
+  setTitle(title?: string): void;
 }
 export interface GMarkerCtor {
   new (opts: {
@@ -61,6 +66,18 @@ export interface GMarkerCtor {
   }): GMarker;
 }
 
+/**
+ * Directions, used only to draw the driven route as a line. Typed loosely —
+ * we hand the result straight back to the renderer and never read into it.
+ */
+export interface GDirectionsService {
+  route(request: object, callback: (result: unknown, status: string) => void): void;
+}
+export interface GDirectionsRenderer {
+  setMap(m: GMap | null): void;
+  setDirections(result: unknown): void;
+}
+
 export interface GoogleNamespace {
   maps: {
     Map:          new (el: HTMLElement, opts: object) => GMap;
@@ -68,6 +85,9 @@ export interface GoogleNamespace {
     LatLngBounds: new () => GLatLngBounds;
     OverlayView:  GOverlayCtor;
     Marker:       GMarkerCtor;
+    /** Absent unless the Directions API is enabled on the key. */
+    DirectionsService?:  new () => GDirectionsService;
+    DirectionsRenderer?: new (opts: object) => GDirectionsRenderer;
   };
 }
 

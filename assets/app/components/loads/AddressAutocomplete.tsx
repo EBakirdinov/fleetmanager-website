@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { MapPin } from "lucide-react";
+import { MapPin, Search } from "lucide-react";
 import { apiAddressSuggest, type AddressSuggestion } from "../../lib/api";
-import { cellInputCls, cellLabelCls, useCellReadOnly } from "../../lib/cells";
+import { cellInputCls, cellLabelCls, fieldShellCls, fieldIconCls, useCellReadOnly } from "../../lib/cells";
 
 /**
  * Textarea + address autocomplete dropdown backed by /api/geocode/suggest.
@@ -19,13 +19,18 @@ import { cellInputCls, cellLabelCls, useCellReadOnly } from "../../lib/cells";
  * the Load page, rendering its caption with the shared cell label style.
  */
 export default function AddressAutocomplete({
-  label, value, onChange, onSelect, rows = 2, bare = false,
+  label, value, onChange, onSelect, rows = 1, bare = false,
 }: {
   label:    string;
   value:    string;
   onChange: (v: string) => void;
   /** Fired when the user picks a suggestion (parent can then geocode). */
   onSelect?: (address: string) => void;
+  /**
+   * Textarea rows. One by default: an address is one line on every document
+   * it gets copied from, and a double-height field left the single-line cells
+   * beside it stranded at the top of a row twice as tall as they were.
+   */
   rows?: number;
   /** Borderless variant for the Load page's cell grid. */
   bare?: boolean;
@@ -137,8 +142,8 @@ export default function AddressAutocomplete({
   if (atRest) {
     return (
       <>
-        <div className={cellLabelCls}>{label}</div>
-        <div className={`mt-1.5 text-[length:var(--cell-fs)] leading-[1.6] ${value ? "text-foreground" : "text-muted-foreground/40"}`}>
+        <div className={`${cellLabelCls} mb-1.5`}>{label}</div>
+        <div className={`text-[length:var(--cell-fs)] leading-[1.6] ${value ? "text-foreground" : "text-muted-foreground/40"}`}>
           {value || "—"}
         </div>
       </>
@@ -147,27 +152,46 @@ export default function AddressAutocomplete({
 
   return (
     <div ref={containerRef} className={bare ? "relative" : "flex flex-col gap-1.5 relative"}>
-      <label htmlFor={fieldId} className={`${bare ? cellLabelCls : "text-xs font-mono text-muted-foreground tracking-wider uppercase"} cursor-text`}>
+      <label htmlFor={fieldId} className={`${bare ? `${cellLabelCls} mb-1.5 block` : "text-xs font-mono text-muted-foreground tracking-wider uppercase"} cursor-text`}>
         {label}
         {loading && <span className="ml-2 text-muted-foreground/60 normal-case tracking-normal">searching…</span>}
       </label>
-      <textarea
-        ref={textareaRef}
-        id={fieldId}
-        value={value}
-        rows={rows}
-        placeholder={bare ? "Street, city, state ZIP" : undefined}
-        onChange={e => {
-          typedRef.current = true;
-          lastPickedRef.current = null;
-          onChange(e.target.value);
-        }}
-        onFocus={() => { if (predictions.length > 0) setOpen(true); }}
-        onKeyDown={handleKeyDown}
-        className={bare
-          ? `${cellInputCls} w-full resize-none leading-relaxed mt-1.5 block`
-          : "bg-input-background text-foreground border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring transition-colors resize-none"}
-      />
+      {bare ? (
+        <div className={fieldShellCls}>
+          <MapPin size={14} className={fieldIconCls} />
+          <textarea
+            ref={textareaRef}
+            id={fieldId}
+            value={value}
+            rows={rows}
+            placeholder="Street, city, state ZIP"
+            onChange={e => {
+              typedRef.current = true;
+              lastPickedRef.current = null;
+              onChange(e.target.value);
+            }}
+            onFocus={() => { if (predictions.length > 0) setOpen(true); }}
+            onKeyDown={handleKeyDown}
+            className={`${cellInputCls} flex-1 min-w-0 resize-none block py-0 leading-[1.5]`}
+          />
+          <Search size={13} className={fieldIconCls} />
+        </div>
+      ) : (
+        <textarea
+          ref={textareaRef}
+          id={fieldId}
+          value={value}
+          rows={rows}
+          onChange={e => {
+            typedRef.current = true;
+            lastPickedRef.current = null;
+            onChange(e.target.value);
+          }}
+          onFocus={() => { if (predictions.length > 0) setOpen(true); }}
+          onKeyDown={handleKeyDown}
+          className="bg-input-background text-foreground border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring transition-colors resize-none"
+        />
+      )}
 
       {open && predictions.length > 0 && (
         <ul

@@ -43,7 +43,7 @@ export const navSections: NavSection[] = [
   {
     label: "Manage",
     items: [
-      { path: "/workers",  label: "Workers",  title: "Workers",  sub: "Manage who can access your account and what they can do", icon: UserCog, roles: WORKER_ADMIN_ROLES },
+      { path: "/workers",  label: "Users & Access",  title: "Users & Access",  sub: "Manage who can access your account and what they can do", icon: UserCog, roles: WORKER_ADMIN_ROLES },
       { path: "/settings", label: "Settings", title: "Settings", sub: "Your account and your company",                           icon: Settings },
     ],
   },

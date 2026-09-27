@@ -531,6 +531,7 @@ export interface LoadItem {
   driver?: { id: number; first_name?: string | null; last_name?: string | null; phone?: string | null } | null;
 
   // Section 4 — Equipment Requirements
+  load_type?:         string | null;
   trailer_type?:      string | null;
   temperature?:       string | null;
   weight_lbs?:        number | null;
@@ -540,12 +541,12 @@ export interface LoadItem {
   seal_required?:     boolean | null;
   straps_load_bars?:  string | null;
 
-  // Section 6 — Rate & Cost Breakdown (Doctrine decimals arrive as numbers via `float` serializer)
-  line_haul_rate?:    number | null;
-  fuel_surcharge?:    number | null;
-  accessorials?:      number | null;
-  detention?:         number | null;
-  estimated_cost?:    number | null;
+  /**
+   * Section 6 — Rate & Cost Breakdown. One row per line; the five decimal
+   * columns this section used to be are gone. `rate` above is the server's
+   * cache of these lines' revenue total.
+   */
+  accessorial_lines?: LoadAccessorialItem[] | null;
 
   // Section 9 — Notes
   special_instructions?: string | null;
@@ -568,7 +569,9 @@ export interface LoadStopItem {
   facility_name?:  string | null;
   address?:        string | null;
   date?:           string | null;  // YYYY-MM-DD
-  window_start?:   string | null;  // HH:MM
+  /** HH:MM. The appointment time when scheduling_type is "appointment". */
+  window_start?:   string | null;
+  /** Null when scheduling_type is "appointment" — an appointment has no end bound. */
   window_end?:     string | null;
   contact_person?: string | null;
   phone?:          string | null;
@@ -576,8 +579,6 @@ export interface LoadStopItem {
   hours_end?:      string | null;
   scheduling_type?: string | null;
   reference?:      string | null;
-  confirmed_on?:   string | null;  // ISO datetime
-  confirmed_by?:   string | null;
   instructions?:   string | null;
   eta?:            string | null;  // ISO datetime
   pod_required?:   boolean | null;
@@ -586,8 +587,49 @@ export interface LoadStopItem {
   longitude?:      number | null;
 }
 
+/**
+ * One line of a load's rate & cost breakdown.
+ *
+ * `type` is a preset from the catalog in components/loads/accessorials.ts
+ * ("line_haul", "detention", …) or "custom" for a line the dispatcher named
+ * themselves — the only type that carries `custom_name` and the only one
+ * that may appear more than once on a load. `category` decides which block
+ * it renders in and which side of the ledger it counts on; the server
+ * derives it from `type` for presets, so it is not worth setting by hand.
+ */
+export interface LoadAccessorialItem {
+  id?:            number;
+  category:       string;
+  type:           string;
+  custom_name?:   string | null;
+  amount?:        number | null;
+  notes?:         string | null;
+  include_in_rate_confirmation?: boolean | null;
+  sequence?:      number | null;
+}
+
 export async function apiGetLoad(id: number | string): Promise<LoadItem> {
   const res = await apiProxy<{ outcome: string; data: LoadItem }>(`load/${id}`);
+
+  return res.data;
+}
+
+/**
+ * Create a load, stops and all, in one request.
+ *
+ * `stops` and `accessorialLines` go in nested — LoadType declares both as
+ * collections with cascade persist, so the whole record saves in a single
+ * transaction rather than a POST followed by a stop call per stop.
+ *
+ * Returns the created load rather than void, unlike apiCreateTruck and its
+ * neighbours: the API answers 201 with the serialized entity, and the Add
+ * page needs the new id to send the user on to it.
+ */
+export async function apiCreateLoad(data: Record<string, unknown>): Promise<LoadItem> {
+  const res = await apiProxy<{ outcome: string; data: LoadItem }>("load", {
+    method: "POST",
+    body:   JSON.stringify(data),
+  });
 
   return res.data;
 }
@@ -636,23 +678,62 @@ export interface RouteSummary {
   duration_sec:      number;
   eta_pickup_sec:    number | null;
   eta_delivery_sec:  number;
+
+  /**
+   * How the figures were arrived at.
+   *
+   * `routed` came from the map provider and is what the load is billed on.
+   * `estimated` is straight-line distance, used when the company has no
+   * Routes API or Google refused the request — it runs 15–25% under real
+   * road miles, and its durations assume a flat average speed. Anything
+   * showing an estimate has to say so.
+   */
+  source:            "routed" | "estimated";
+
+  /**
+   * Display name of the map provider that answered, straight from the
+   * integration catalog — "Google Maps" today, whatever is added tomorrow
+   * without a change here. Null when `source` is `estimated`: nothing
+   * external was consulted, the distance was computed locally.
+   */
+  provider:          string | null;
 }
 
+
 /**
- * A single time-slice of weather. Returned as an array in WeatherForecast:
- *   • 1 bucket  — window-specific reading (when the caller passed window
- *                 start + end) with label like "08:00–12:00".
- *   • 4 buckets — Morning / Afternoon / Evening / Night breakdown.
+ * A single time-slice of weather. Two flavours share this shape:
+ *   • an outlook day in `WeatherForecast.buckets` — labelled by weekday
+ *     ("Mon"), carrying its own `date` and `high_f`/`low_f`;
+ *   • the appointment reading in `WeatherForecast.window` — labelled with the
+ *     hours ("08:00–12:00"), carrying `humidity` instead.
  */
 export interface WeatherBucket {
   label:       string;
+  /** `YYYY-MM-DD`, day buckets only — the window reading covers one date. */
+  date?:       string;
   temp_f:      number;
   description: string;
   code:        number;
   rain_chance: number; // 0–100
+  /** Day buckets only: that day's own high and low, not the request date's. */
+  high_f?:     number | null;
+  low_f?:      number | null;
+  /** Averaged over the bucket's hours; direction is a vector mean. */
+  wind_mph?:   number;
+  wind_dir?:   string; // "N" | "NE" | … | "NW"
+  humidity?:   number; // 0–100
 }
 
 export interface WeatherForecast {
+  /** The stop date's high and low — what the window reading is qualified by. */
+  high_f?: number | null;
+  low_f?:  number | null;
+  /**
+   * The appointment-hours reading. Present only when the caller passed both
+   * window bounds and the forecast actually covered those hours.
+   */
+  window?: WeatherBucket | null;
+  /** The day-by-day outlook. Always present, window or not. */
   buckets: WeatherBucket[];
 }
 
@@ -808,21 +889,25 @@ export async function apiAddressSuggest(query: string): Promise<AddressSuggestio
   return res.predictions ?? [];
 }
 
+/**
+ * Route the whole trip. `stops` is every stop in sequence, not just the ends
+ * — a load that calls somewhere in the middle does not drive the direct line,
+ * and the miles it is paid on are the ones it covers.
+ */
 export function apiRoute(
-  origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number },
+  stops: { lat: number; lng: number }[],
   truck?: { lat: number; lng: number } | null,
 ): Promise<RouteSummary | null> {
   return nullOn404(() => apiProxy<RouteSummary>("route", {
     method: "POST",
-    body:   JSON.stringify({ origin, destination, truck: truck ?? undefined }),
+    body:   JSON.stringify({ stops, truck: truck ?? undefined }),
   }));
 }
 
 /**
- * `date` is `YYYY-MM-DD`. When both `windowStart` and `windowEnd` (each
- * `HH:MM`) are provided, the response contains a single window-aggregated
- * bucket; otherwise 4 time-of-day buckets covering the day.
+ * `date` is `YYYY-MM-DD`. The response always carries a 4-day outlook in
+ * `buckets`, one per day from `date` on; passing both `windowStart` and
+ * `windowEnd` (each `HH:MM`) adds a `window` reading for those hours.
  */
 export function apiWeather(
   lat: number, lng: number, date: string,
@@ -991,11 +1076,42 @@ export async function apiGetIntegrationStatus(): Promise<Record<string, boolean>
   return apiProxy<Record<string, boolean>>("integration");
 }
 
-export async function apiSaveIntegration(slug: string, config: Record<string, string>): Promise<void> {
+/** One capability's verdict from POST /integration/{slug}/test. */
+export interface IntegrationProbeResult {
+  ok:      boolean;
+  message: string;
+}
+
+/**
+ * Fields are merged over what is stored, so sending a subset keeps the rest —
+ * which is what lets the drawer say "leave a field blank to keep the current
+ * value" and still post checkbox state on every save.
+ */
+export async function apiSaveIntegration(
+  slug: string,
+  config: Record<string, string | boolean | number>,
+): Promise<void> {
   await apiProxy<{ slug: string; connected: true }>(`integration/${slug}`, {
     method: "PUT",
     body: JSON.stringify(config),
   });
+}
+
+/**
+ * Ask the provider what these credentials can actually do, per capability.
+ * `config` may carry unsaved edits; anything omitted falls back to what is
+ * stored, so the button works before a save.
+ */
+export async function apiTestIntegration(
+  slug: string,
+  config?: Record<string, string | boolean | number>,
+): Promise<Record<string, IntegrationProbeResult>> {
+  const res = await apiProxy<{ results: Record<string, IntegrationProbeResult> }>(
+    `integration/${slug}/test`,
+    { method: "POST", body: JSON.stringify(config ?? {}) },
+  );
+
+  return res.results ?? {};
 }
 
 export async function apiDeleteIntegration(slug: string): Promise<void> {

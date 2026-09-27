@@ -1,256 +1,437 @@
 import {
   useEffect, useRef, useState,
-  type ChangeEvent, type CSSProperties, type ReactNode,
+  type ChangeEvent, type ReactNode,
 } from "react";
-import { Info } from "lucide-react";
-import { SectionCard, bandCls, captionCls, cellInputCls } from "../../lib/cells";
+import { ChevronDown, DollarSign, EyeOff, Info, Pencil, Plus, X } from "lucide-react";
+import { SECTION_LEAD_PX, SectionCard, captionCls, cellInputCls, useCellReadOnly } from "../../lib/cells";
+import AddAccessorialModal, { type AccessorialDraft } from "./AddAccessorialModal";
+import { ESTIMATED_NOTE } from "./routeSummary";
+import {
+  ACCESSORIAL_GROUPS, CUSTOM_TYPE,
+  costBlockIsEmpty, groupTotal, isRevenue,
+  linesFromApi, linesToPayload, nextCustomKey, totalCost, totalRevenue,
+  type AccessorialLine, type GroupDef,
+} from "./accessorials";
 
 /**
- * Section 6 — Rate & Cost Breakdown, as a ledger.
+ * Section 6 — Rate & Cost Breakdown, as a ledger of grouped lines.
  *
- * Rules mark the arithmetic, not every row. The sheet draws a hairline
- * between its direct children, so grouping the four revenue lines into one
- * child — and the cost/result pair into another — leaves exactly the three
- * rules that mean something: under the header, and bracketing Total Revenue.
- * Rows inside a group are separated by space alone, which is what lets the
- * rules read as arithmetic rather than as table furniture.
+ * Every figure is a line, and a line is either one of the eleven presets in
+ * the catalog or something a dispatcher added through the Add Accessorial
+ * dialog. See accessorials.ts for the catalog and the arithmetic; this file
+ * is the reading of it.
  *
- * The figure column carries its own currency mark and right-aligns whole,
- * so amounts line up on their last digit with nothing floating between the
- * label and the number.
+ * The blocks fold because the ledger is long and most loads only ever touch
+ * two or three of its lines — folding Surcharges away is how a dispatcher
+ * keeps the run of figures they care about on one screen.
  *
- * Public API (state, payload adapter) unchanged from prior version.
+ * Rules mark arithmetic, not rows. A block gets a rule above its subtotal;
+ * Total Revenue and Profit are washed bands rather than ruled rows, because
+ * they are conclusions rather than more line items. Inside a block, rows are
+ * separated by nothing but space — which is what lets the few rules that are
+ * there read as arithmetic instead of table furniture.
+ *
+ * The figure column carries its own currency mark and right-aligns whole, so
+ * amounts line up on their last digit with nothing floating between a label
+ * and its number.
  */
 
-const COST_PER_MILE = 1.6; // Default suggestion; move to company setting later.
-
-/**
- * The ledger runs looser than the rest of the kit. A column of figures is
- * read by jumping down it, and rows set tight enough for a dense form make
- * that jump harder — statements and invoices have always given their lines
- * more air than a form gives its fields.
- */
-const LEDGER_METRICS = {
-  "--cell-px": "1.125rem",
-  "--cell-py": "1rem",
-  "--cell-fs": "0.9375rem",
-} as CSSProperties;
+/** Default suggestion for Est. Fuel Cost; move to a company setting later. */
+const COST_PER_MILE = 1.6;
 
 export interface RateCostFormState {
-  lineHaulRate:   string;
-  fuelSurcharge:  string;
-  accessorials:   string;
-  detention:      string;
-  estimatedCost:  string;
+  lines: AccessorialLine[];
 }
 
-export const emptyRateCostForm = (): RateCostFormState => ({
-  lineHaulRate: "", fuelSurcharge: "", accessorials: "", detention: "",
-  estimatedCost: "",
-});
+export const emptyRateCostForm = (): RateCostFormState => ({ lines: linesFromApi(null) });
 
 export function rateCostFormToPayload(f: RateCostFormState): Record<string, unknown> {
-  return {
-    lineHaulRate:  f.lineHaulRate  ? Number(f.lineHaulRate)  : null,
-    fuelSurcharge: f.fuelSurcharge ? Number(f.fuelSurcharge) : null,
-    accessorials:  f.accessorials  ? Number(f.accessorials)  : null,
-    detention:     f.detention     ? Number(f.detention)     : null,
-    estimatedCost: f.estimatedCost ? Number(f.estimatedCost) : null,
-  };
+  return { accessorialLines: linesToPayload(f.lines) };
 }
 
 // ─── Section ─────────────────────────────────────────────────────────────────
 
 export default function RateCostSection({
-  value, onChange, totalMiles, sectionNumber = 6,
+  value, onChange, totalMiles, milesSource, sectionNumber = 6,
 }: {
   value:      RateCostFormState;
   onChange:   (patch: Partial<RateCostFormState>) => void;
   totalMiles?: number | null;
   /**
+   * How `totalMiles` was arrived at. Every per-mile figure here inherits its
+   * error: an `estimated` distance runs 15–25% under the real one, which
+   * understates the suggested fuel cost by the same margin and overstates
+   * all-in RPM by about a third — both in the flattering direction, which is
+   * the direction worth labelling.
+   */
+  milesSource?: "routed" | "estimated" | null;
+  /**
    * Sections are numbered per page, not per component: the Add page runs
-   * Assignment at 5 and this at 6, while the control page has no Assignment
+   * Assignment at 4 and this at 6, while the control page has no Assignment
    * and runs this at 5. The page owns the sequence.
    */
   sectionNumber?: number;
 }) {
-  const [costTouched, setCostTouched] = useState(!!value.estimatedCost);
+  /**
+   * The control page wraps this section in an EditableSection, so it spends
+   * most of its life being read rather than filled in. At rest the figures
+   * are text: eleven live inputs sitting in a section nobody pressed Edit on
+   * invite a stray keystroke into the one number on the page that decides
+   * whether the load was worth taking.
+   */
+  const atRest = useCellReadOnly();
 
+  const [costTouched, setCostTouched] = useState(false);
+  const [dialogOpen,  setDialogOpen]  = useState(false);
+  /** Set when the dialog was opened to change an existing custom line. */
+  const [editingKey,  setEditingKey]  = useState<string | null>(null);
+
+  const lines = value.lines;
+
+  const patchLines = (next: AccessorialLine[]) => onChange({ lines: next });
+
+  const setAmount = (key: string, amount: string, category: AccessorialLine["category"]) => {
+    if (category === "cost") setCostTouched(true);
+    patchLines(lines.map(l => (l.key === key ? { ...l, amount } : l)));
+  };
+
+  const removeLine = (key: string) => patchLines(lines.filter(l => l.key !== key));
+
+  /**
+   * Est. Fuel Cost fills itself in from the routed miles until somebody
+   * types a cost of their own.
+   *
+   * Gated on the whole cost block being empty rather than on this one line:
+   * a load carried over from the single `estimated_cost` column lands its
+   * figure in Other Costs, and suggesting a fuel cost on top of that would
+   * quietly double the load's costs the first time the page was opened.
+   */
   useEffect(() => {
+    if (atRest) return;
     if (costTouched) return;
     if (typeof totalMiles !== "number" || totalMiles <= 0) return;
-    const suggested = (totalMiles * COST_PER_MILE).toFixed(2);
-    if (value.estimatedCost !== suggested) {
-      onChange({ estimatedCost: suggested });
-    }
-  }, [totalMiles, costTouched, value.estimatedCost, onChange]);
+    if (!costBlockIsEmpty(lines)) return;
 
-  const totalRevenue = num(value.lineHaulRate) + num(value.fuelSurcharge)
-                     + num(value.accessorials) + num(value.detention);
-  const cost   = num(value.estimatedCost);
-  const profit = totalRevenue - cost;
-  const margin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : null;
+    const suggested = (totalMiles * COST_PER_MILE).toFixed(2);
+    onChange({ lines: lines.map(l => (l.type === "est_fuel" ? { ...l, amount: suggested } : l)) });
+  }, [atRest, totalMiles, costTouched, lines, onChange]);
+
+  const revenue = totalRevenue(lines);
+  const cost    = totalCost(lines);
+  const profit  = revenue - cost;
+  const margin  = revenue > 0 ? (profit / revenue) * 100 : null;
 
   const milesKnown = typeof totalMiles === "number" && totalMiles > 0;
+  /** All-in rate per mile — the one figure worth promoting into the header. */
+  const allInRpm = milesKnown && revenue > 0 ? revenue / totalMiles! : null;
 
-  // Per-mile fuel rate — shown under Fuel Surcharge when miles + amount known.
-  const fuelAmount = num(value.fuelSurcharge);
-  const fuelSub = milesKnown && fuelAmount > 0
-    ? `${Math.round(totalMiles!).toLocaleString()} mi × $${(fuelAmount / totalMiles!).toFixed(2)}/mi`
-    : null;
+  const suggestionShowing = !costTouched && milesKnown;
 
-  // All-in rate per mile: the number a dispatcher judges a load by, and the
-  // one figure worth promoting out of the breakdown into the header.
-  const allInRpm = milesKnown && totalRevenue > 0 ? totalRevenue / totalMiles! : null;
+  const milesEstimated = milesSource === "estimated";
+
+  // ── Dialog plumbing ──────────────────────────────────────────────────
+  const editing = editingKey === null ? null : lines.find(l => l.key === editingKey) ?? null;
+
+  const commitDraft = (draft: AccessorialDraft) => {
+    if (editing) {
+      patchLines(lines.map(l => (l.key === editing.key ? { ...l, ...draftToLine(draft) } : l)));
+    } else {
+      patchLines([...lines, { key: nextCustomKey(), preset: false, ...draftToLine(draft) }]);
+    }
+    setDialogOpen(false);
+    setEditingKey(null);
+  };
 
   return (
     <SectionCard
       n={sectionNumber}
       color="#059669"
       title="Rate & Cost Breakdown"
-      style={LEDGER_METRICS}
-      meta={allInRpm !== null && (
-        <span className={`${captionCls} flex-shrink-0`}>
-          <span className="text-foreground font-semibold">${allInRpm.toFixed(2)}</span> / mi all-in
-        </span>
-      )}
+      icon={DollarSign}
+      bare
+      collapsible
+      meta={
+        <>
+          {allInRpm !== null && (
+            <span
+              className={`${captionCls} flex-shrink-0 hidden sm:inline`}
+              title={milesEstimated ? ESTIMATED_NOTE : undefined}
+            >
+              <span className="text-foreground font-semibold">${allInRpm.toFixed(2)}</span> / mi all-in
+              {milesEstimated && <span className="text-amber-500 ml-1">(est. miles)</span>}
+            </span>
+          )}
+          {!atRest && (
+          <button
+            type="button"
+            // The header band toggles the section; this button sits inside it
+            // and must not fold the ledger shut on its way to opening a dialog.
+            onClick={e => { e.stopPropagation(); setEditingKey(null); setDialogOpen(true); }}
+            // Pinned to the header's own height so it sits in the band rather
+            // than stretching it — see SheetHeader's meta slot.
+            style={{ height: SECTION_LEAD_PX }}
+            className="flex items-center gap-1 flex-shrink-0 px-2 leading-none rounded-md border border-primary/40
+                       bg-primary/10 text-primary text-xs font-medium cursor-pointer
+                       hover:bg-primary/20 hover:border-primary/60 transition-colors
+                       focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <Plus size={12} /> <span className="hidden sm:inline">Add Accessorial</span>
+          </button>
+          )}
+        </>
+      }
     >
-      {/* Revenue lines — one group, so no rule falls between them. */}
-      <div>
-        <LineItem
-          label="Line Haul Rate"
-          value={value.lineHaulRate}
-          onChange={v => onChange({ lineHaulRate: v })}
-        />
-        <LineItem
-          label="Fuel Surcharge"
-          tooltip="Additional charge covering fuel cost fluctuations. Some brokers price this as $ per loaded mile."
-          value={value.fuelSurcharge}
-          onChange={v => onChange({ fuelSurcharge: v })}
-          subtitle={fuelSub}
-        />
-        <LineItem
-          label="Accessorials"
-          tooltip="Extra services: lumper fees, tolls, driver assist, etc."
-          value={value.accessorials}
-          onChange={v => onChange({ accessorials: v })}
-        />
-        <LineItem
-          label="Detention"
-          value={value.detention}
-          onChange={v => onChange({ detention: v })}
-        />
-      </div>
+      {ACCESSORIAL_GROUPS.map(def => (
+        <div key={def.category}>
+          <Group
+            def={def}
+            atRest={atRest}
+            lines={lines.filter(l => l.category === def.category)}
+            subtotal={groupTotal(lines, def.category)}
+            suggestionShowing={suggestionShowing}
+            totalMiles={totalMiles}
+            milesEstimated={milesEstimated}
+            onAmount={setAmount}
+            onRemove={removeLine}
+            onEdit={key => { setEditingKey(key); setDialogOpen(true); }}
+          />
 
-      {/* Bracketed by the sheet's own rules — the subtotal. */}
-      <TotalLine label="Total Revenue" amount={totalRevenue} tone="positive" />
+          {/* Revenue is settled once the last revenue block has been read;
+              the whole sheet is settled once costs have. */}
+          {def.category === "other_revenue" && (
+            <TotalBand label="Total Revenue" amount={revenue} tone="positive" />
+          )}
+          {def.category === "cost" && (
+            <TotalBand
+              label="Profit / Margin"
+              amount={profit}
+              note={margin === null ? null : `${margin.toFixed(1)}%`}
+              tone={profit >= 0 ? "positive" : "negative"}
+              grand
+            />
+          )}
+        </div>
+      ))}
 
-      {/* Cost and result — one group, one rule above it. */}
-      <div>
-        <LineItem
-          label="Estimated Cost"
-          value={value.estimatedCost}
-          onChange={v => { setCostTouched(true); onChange({ estimatedCost: v }); }}
-          subtitle={!costTouched && milesKnown
-            ? `suggested at $${COST_PER_MILE.toFixed(2)}/mi × ${Math.round(totalMiles!).toLocaleString()} mi`
-            : null}
-          negative
-        />
-        <TotalLine
-          label="Profit / Margin"
-          amount={profit}
-          note={margin === null ? null : `(${margin.toFixed(1)}%)`}
-          tone={profit >= 0 ? "positive" : "negative"}
-          grand
-        />
-      </div>
+      <AddAccessorialModal
+        open={dialogOpen}
+        editing={editing}
+        onClose={() => { setDialogOpen(false); setEditingKey(null); }}
+        onSubmit={commitDraft}
+      />
     </SectionCard>
   );
 }
 
-// ─── Ledger rows ─────────────────────────────────────────────────────────────
+function draftToLine(d: AccessorialDraft): Omit<AccessorialLine, "key" | "preset"> {
+  return {
+    type:     CUSTOM_TYPE,
+    category: d.category,
+    label:    d.name,
+    tooltip:  d.notes || undefined,
+    amount:   d.amount,
+    notes:    d.notes,
+    includeInRateCon: d.includeInRateCon,
+  };
+}
 
-/**
- * Shared row height. Ledger lines want air — and because the whole band is
- * the label, the row's full height is the click target for its field, not
- * just the one text line the caret sits on.
- */
-const ROW_MIN_H = "min-h-[4.25rem]";
+// ─── Blocks ──────────────────────────────────────────────────────────────────
 
-/**
- * The money column. Figures right-align as whole strings — "$2,500.00" —
- * with the mark attached, so nothing floats between a label and its number.
- */
-function Amount({ negative, strong, color, children }: {
-  negative?: boolean;
-  strong?:   boolean;
-  color?:    string;
-  children:  ReactNode;
+function Group({
+  def, atRest, lines, subtotal, suggestionShowing, totalMiles, milesEstimated, onAmount, onRemove, onEdit,
+}: {
+  def:      GroupDef;
+  atRest:   boolean;
+  lines:    AccessorialLine[];
+  subtotal: number;
+  suggestionShowing: boolean;
+  totalMiles?: number | null;
+  /** `totalMiles` is a straight-line estimate, so the suggestion off it is low. */
+  milesEstimated?: boolean;
+  onAmount: (key: string, amount: string, category: AccessorialLine["category"]) => void;
+  onRemove: (key: string) => void;
+  onEdit:   (key: string) => void;
 }) {
-  const size = strong ? "text-base" : "text-[length:var(--cell-fs)]";
-  // A gap after the mark: set tight, "$123123123123" reads as one long token
-  // and the eye has to hunt for where the number starts.
+  const [open, setOpen] = useState(true);
+
+  // A folded block still has to admit what it is holding, or folding one
+  // becomes a way to lose money without noticing.
+  const filled = lines.filter(l => l.amount.trim() !== "").length;
+
   return (
-    <span className={`flex items-baseline flex-shrink-0 gap-1 font-mono font-semibold ${size} ${color ?? "text-foreground"}`}>
-      {negative && <span>−</span>}
-      <span>$</span>
-      {children}
-    </span>
+    <div className="border-t border-border first:border-t-0">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 w-full px-[var(--cell-px)] py-2 cursor-pointer
+                   hover:bg-muted/25 transition-colors text-left
+                   focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+      >
+        <ChevronDown
+          size={13}
+          aria-hidden
+          className={`text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
+        />
+        <span className={`${captionCls} truncate`}>{def.label}</span>
+        {!open && filled > 0 && (
+          <span className="ml-auto text-[length:var(--cell-hint-fs)] font-mono text-muted-foreground/70 flex-shrink-0">
+            {filled} filled
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          {lines.map(line => (
+            <LineRow
+              key={line.key}
+              line={line}
+              atRest={atRest}
+              subtitle={
+                line.type === "est_fuel" && suggestionShowing && typeof totalMiles === "number"
+                  ? `suggested at $${COST_PER_MILE.toFixed(2)}/mi × ${Math.round(totalMiles).toLocaleString()} mi${
+                      milesEstimated ? " (approx.)" : ""}`
+                  : null
+              }
+              onAmount={onAmount}
+              onRemove={onRemove}
+              onEdit={onEdit}
+            />
+          ))}
+
+          {def.subtotal && (
+            <div className="flex items-center justify-between gap-3 mx-[var(--cell-px)] py-2 border-t border-border">
+              <span className="text-[length:var(--cell-fs)] font-semibold text-foreground">{def.subtotal}</span>
+              <Amount negative={def.category === "cost" && subtotal !== 0}>
+                <span>{formatFigure(Math.abs(subtotal))}</span>
+              </Amount>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
-function LineItem({ label, tooltip, subtitle, value, onChange, negative }: {
-  label:     string;
-  tooltip?:  string;
-  subtitle?: string | null;
-  value:     string;
-  onChange:  (v: string) => void;
-  /** Renders a minus ahead of the mark — this figure is taken away. */
-  negative?: boolean;
+function LineRow({ line, atRest, subtitle, onAmount, onRemove, onEdit }: {
+  line:     AccessorialLine;
+  atRest:   boolean;
+  subtitle: string | null;
+  onAmount: (key: string, amount: string, category: AccessorialLine["category"]) => void;
+  onRemove: (key: string) => void;
+  onEdit:   (key: string) => void;
 }) {
+  const hiddenFromBroker = isRevenue(line.category) && !line.includeInRateCon;
+
+  // A <label> at rest would still hand focus to a control that is no longer
+  // there, and advertise a text caret over a figure that cannot be typed in.
+  const Wrapper = atRest ? "div" : "label";
+
   return (
-    <label
-      className={`${bandCls} ${ROW_MIN_H} flex flex-col justify-center cursor-text hover:bg-muted/25 focus-within:bg-primary/[0.05]`}
+    <Wrapper
+      className={`group/row flex flex-col justify-center px-[var(--cell-px)] py-1.5
+                  hover:bg-muted/25 focus-within:bg-primary/[0.05] transition-colors ${
+        atRest ? "" : "cursor-text"
+      }`}
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[length:var(--cell-fs)] text-muted-foreground flex items-center gap-1 min-w-0">
-          {label}
-          {tooltip && (
+      <div className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1 min-w-0 flex-1 text-[length:var(--cell-fs)] text-muted-foreground">
+          <span className="truncate">{line.label}</span>
+
+          {line.tooltip && (
             <span
-              title={tooltip}
+              title={line.tooltip}
               onClick={e => e.preventDefault()}
               className="text-muted-foreground/60 cursor-help flex-shrink-0"
             >
               <Info size={11} />
             </span>
           )}
+
+          {hiddenFromBroker && (
+            <span
+              title="Not itemised on the rate confirmation."
+              onClick={e => e.preventDefault()}
+              className="text-muted-foreground/50 cursor-help flex-shrink-0"
+            >
+              <EyeOff size={11} />
+            </span>
+          )}
         </span>
-        <Amount negative={negative}>
-          <MoneyInput value={value} onChange={onChange} />
+
+        {/* Custom lines are the only ones that can be renamed or taken away —
+            a preset with no amount is already as absent as it can be. */}
+        {!line.preset && !atRest && (
+          <span className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
+            <RowAction label={`Edit ${line.label}`} onClick={() => onEdit(line.key)}>
+              <Pencil size={11} />
+            </RowAction>
+            <RowAction label={`Remove ${line.label}`} danger onClick={() => onRemove(line.key)}>
+              <X size={12} />
+            </RowAction>
+          </span>
+        )}
+
+        <Amount negative={line.category === "cost"} dim={line.amount.trim() === ""}>
+          {atRest
+            ? <span>{formatFigure(num(line.amount))}</span>
+            : <MoneyInput value={line.amount} onChange={v => onAmount(line.key, v, line.category)} />}
         </Amount>
       </div>
+
       {subtitle && (
-        <div className="text-[length:var(--cell-hint-fs)] font-mono text-muted-foreground/75 mt-1 text-right">
+        <div className="text-[length:var(--cell-hint-fs)] font-mono text-muted-foreground/75 text-right">
           {subtitle}
         </div>
       )}
-    </label>
+    </Wrapper>
   );
 }
 
-function TotalLine({ label, amount, note, tone, grand }: {
+function RowAction({ label, danger, onClick, children }: {
+  label:   string;
+  danger?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      // Inside a <label>: without this the click focuses the money input
+      // instead of firing the action.
+      onClick={e => { e.preventDefault(); onClick(); }}
+      className={`p-1 rounded cursor-pointer transition-colors focus:outline-none
+                  focus-visible:ring-2 focus-visible:ring-primary/40 ${
+        danger
+          ? "text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Total Revenue and Profit / Margin — washed bands rather than ruled rows.
+ * Both are conclusions drawn from everything above them, and a plain rule
+ * would file them as one more line in whichever block they happen to follow.
+ */
+function TotalBand({ label, amount, note, tone, grand }: {
   label:  string;
   amount: number;
   note?:  string | null;
-  tone?:  "positive" | "negative";
-  /** The final figure — heavier type, and the note rides alongside it. */
+  tone:   "positive" | "negative";
+  /** The final figure — heavier type, and the margin rides alongside it. */
   grand?: boolean;
 }) {
-  const color = tone === "negative" ? "text-red-500"
-              : tone === "positive" ? "text-emerald-500"
-              : "text-foreground";
+  const color = tone === "negative" ? "text-red-500" : "text-emerald-500";
+  const wash  = tone === "negative" ? "bg-red-500/[0.07]" : "bg-emerald-500/[0.07]";
+
   return (
-    <div className={`${bandCls} ${ROW_MIN_H} flex items-baseline justify-between gap-3`}>
+    <div className={`flex items-center justify-between gap-3 px-[var(--cell-px)] py-2.5 border-t border-border ${wash}`}>
       <span className={`${grand ? "text-base" : "text-[length:var(--cell-fs)]"} font-semibold text-foreground`}>
         {label}
       </span>
@@ -260,11 +441,39 @@ function TotalLine({ label, amount, note, tone, grand }: {
         </Amount>
         {note && (
           <span className={`text-[length:var(--cell-hint-fs)] font-mono ${color} opacity-80`}>
-            {note}
+            ({note})
           </span>
         )}
       </span>
     </div>
+  );
+}
+
+// ─── The money column ────────────────────────────────────────────────────────
+
+/**
+ * Figures right-align as whole strings — "$2,500.00" — with the mark
+ * attached, so nothing floats between a label and its number.
+ */
+function Amount({ negative, strong, color, dim, children }: {
+  negative?: boolean;
+  strong?:   boolean;
+  color?:    string;
+  /** Nothing entered — matches the weight of the input's placeholder. */
+  dim?:      boolean;
+  children:  ReactNode;
+}) {
+  const size = strong ? "text-base" : "text-[length:var(--cell-fs)]";
+  const tone = dim ? "text-muted-foreground/45" : (color ?? "text-foreground");
+
+  // A gap after the mark: set tight, "$123123123123" reads as one long token
+  // and the eye has to hunt for where the number starts.
+  return (
+    <span className={`flex items-baseline flex-shrink-0 gap-1 font-mono font-semibold ${size} ${tone}`}>
+      {negative && !dim && <span>−</span>}
+      <span>$</span>
+      {children}
+    </span>
   );
 }
 
@@ -360,7 +569,7 @@ function num(s: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Grouped, two-decimal figure — no currency mark; AmountCol renders that. */
+/** Grouped, two-decimal figure — no currency mark; Amount renders that. */
 function formatFigure(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

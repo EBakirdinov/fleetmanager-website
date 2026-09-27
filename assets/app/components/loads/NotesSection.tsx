@@ -1,3 +1,4 @@
+import { StickyNote } from "lucide-react";
 import { SectionCard, Row, TextareaCell } from "../../lib/cells";
 
 /**
@@ -48,7 +49,7 @@ export default function NotesSection({
   columns?: 1 | 3;
 }) {
   return (
-    <SectionCard n={sectionNumber} color="#0ea5e9" title="Notes">
+    <SectionCard n={sectionNumber} color="#0ea5e9" title="Notes" icon={StickyNote} collapsible>
       <Row cols={columns}>
         <TextareaCell
           label="Special Instructions"

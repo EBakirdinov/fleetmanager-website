@@ -11,7 +11,7 @@ import {
   apiListTrailerMakes, apiListTrailerModels, type MakeItem, type ModelItem,
   apiUploadTrailerInspection, apiDeleteTrailerInspection, documentUrl, type InspectionType,
 } from "../lib/api";
-import { validateVIN, validateYear, validatePositiveInt, validateRequired, combineValidators, todayIsoDate } from "../lib/validators";
+import { validateVIN, validateYear, validatePositiveInt, validateRequired, combineValidators, todayIsoDate, formatDate } from "../lib/validators";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -374,6 +374,55 @@ const maintenanceTrend = [
   { m: "Apr", cost: 0 }, { m: "May", cost: 0 }, { m: "Jun", cost: 0 }, { m: "Jul", cost: 0 },
 ];
 
+// ─── Main-table display helpers ──────────────────────────────────────────────
+
+/**
+ * Federal (DOT annual) inspection summary shown under the last inspection
+ * date. Interval is stored in months and falls back to the DOT annual 12
+ * when unset; "Completed" means the last inspection landed within 7 days.
+ *
+ * Trailers only ever show the federal inspection on the main table — state
+ * inspections are tracked in the drawer but not surfaced here.
+ */
+type InspectionStatus =
+  | { kind: "none" }
+  | { kind: "completed" }
+  | { kind: "overdue" }
+  | { kind: "due"; months: number };
+
+const DAYS_PER_MONTH = 30.44;
+const FEDERAL_DEFAULT_MONTHS = 12;
+
+function federalInspectionStatus(t: TrailerItem): InspectionStatus {
+  if (!t.federal_inspection_date) return { kind: "none" };
+  const then = new Date(t.federal_inspection_date).getTime();
+  if (Number.isNaN(then)) return { kind: "none" };
+  const daysSince = (Date.now() - then) / (24 * 60 * 60 * 1000);
+  if (daysSince < 7) return { kind: "completed" };
+  const months = t.federal_inspection_interval && t.federal_inspection_interval > 0
+    ? t.federal_inspection_interval
+    : FEDERAL_DEFAULT_MONTHS;
+  const intervalDays = months * DAYS_PER_MONTH;
+  if (daysSince > intervalDays) return { kind: "overdue" };
+  return { kind: "due", months: Math.max(1, Math.ceil((intervalDays - daysSince) / DAYS_PER_MONTH)) };
+}
+
+/** Amber inside 60 days, red once past — matches the expiry cues elsewhere. */
+function plateExpiryClass(iso: string | null | undefined): string {
+  if (!iso) return "text-muted-foreground";
+  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  if (Number.isNaN(days)) return "text-muted-foreground";
+  if (days < 0)  return "text-red-400 font-semibold";
+  if (days < 60) return "text-amber-400";
+  return "text-muted-foreground";
+}
+
+/** "Dry Van (53 ft)" — length is optional, the type alone is a valid label. */
+function trailerTypeLabel(t: TrailerItem): string {
+  if (!t.type) return "—";
+  return t.length ? `${t.type} (${t.length} ft)` : t.type;
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function Trailers() {
@@ -651,37 +700,66 @@ export default function Trailers() {
               <table className="w-full min-w-[900px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    {["Trailer", "Type", "Make / Model", "VIN", "License Plate", "Odometer", ""].map(h => (
+                    {["Trailer", "Type", "Make / Model", "VIN", "License Plate", "Truck", "Federal Insp.", ""].map(h => (
                       <th key={h} className="text-left px-3 py-2.5 text-xs font-mono text-muted-foreground tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(t => (
+                  {filtered.map(t => {
+                    const federalInsp = federalInspectionStatus(t);
+                    return (
                     <tr key={t.id} className="border-b border-border/50 hover:bg-muted/40 transition-colors">
                       <td className="px-3 py-2.5">
                         <span className="font-mono text-xs text-primary font-semibold">{t.trailer_number ?? `#${t.id}`}</span>
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{t.type ?? "—"}</td>
+
+                      {/* Type: length folded into the label — "Dry Van (53 ft)" */}
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{trailerTypeLabel(t)}</td>
+
                       <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                         {[t.make?.name, t.model?.name].filter(Boolean).join(" ") || "—"}
                       </td>
                       <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{t.vin ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{t.plate_number ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono text-foreground whitespace-nowrap">
-                        {t.odometer != null ? `${t.odometer.toLocaleString()} mi` : "—"}
+
+                      {/* License Plate: number on top, expiration below */}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="text-xs font-mono text-muted-foreground">{t.plate_number ?? "—"}</div>
+                        {t.plate_expiration_date && (
+                          <div className={`text-[11px] font-mono mt-0.5 ${plateExpiryClass(t.plate_expiration_date)}`}>
+                            Exp. {formatDate(t.plate_expiration_date)}
+                          </div>
+                        )}
                       </td>
+
+                      {/* Truck currently pulling this trailer */}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {t.assigned_truck
+                          ? <span className="text-xs font-mono text-foreground">{t.assigned_truck.truck_number ?? `#${t.assigned_truck.id}`}</span>
+                          : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
+
+                      {/* Federal Inspection: date + status */}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {t.federal_inspection_date
+                          ? <div className="text-xs font-mono text-foreground">{formatDate(t.federal_inspection_date)}</div>
+                          : <div className="text-xs text-muted-foreground">—</div>}
+                        {federalInsp.kind === "completed" && <div className="text-[11px] font-mono text-emerald-400 mt-0.5">Completed</div>}
+                        {federalInsp.kind === "overdue"   && <div className="text-[11px] font-mono text-red-400 mt-0.5">Overdue</div>}
+                        {federalInsp.kind === "due"       && <div className="text-[11px] font-mono text-muted-foreground mt-0.5">Due in {federalInsp.months} {federalInsp.months === 1 ? "month" : "months"}</div>}
+                      </td>
+
                       <td className="px-3 py-2.5">
                         <ActionsMenu items={[
                           { label: "Edit",   onClick: () => openEdit(t),   icon: Pencil },
                           { label: "Delete", onClick: () => handleDelete(t), icon: Trash2, variant: "danger" },
                         ]} />
                       </td>
-                    </tr>
-                  ))}
+                    </tr>);
+                  })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-3 py-10 text-center text-xs font-mono text-muted-foreground">No trailers found</td>
+                      <td colSpan={8} className="px-3 py-10 text-center text-xs font-mono text-muted-foreground">No trailers found</td>
                     </tr>
                   )}
                 </tbody>

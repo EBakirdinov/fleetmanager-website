@@ -5,14 +5,18 @@ import { Link } from "react-router";
 import {
   loadGoogleMapsScript, getGoogleNamespace,
   USA_CENTER, USA_ZOOM, DARK_MAP_STYLE, LIGHT_MAP_STYLE,
-  type GMap, type GMarker, type GLatLngLit,
+  type GMap, type GMarker, type GLatLngLit, type GDirectionsRenderer,
 } from "../../lib/googleMaps";
 import { useMapProvider } from "../../lib/mapProvider";
 
 /**
- * Compact Load-detail map: renders up to three pins (pickup / delivery /
- * truck) and auto-fits bounds around whatever is present. When there are
- * no pins yet, shows an empty US-centered map so the frame doesn't collapse.
+ * Compact Load-detail map: renders the run's stops in order plus the truck,
+ * and auto-fits bounds around whatever is present. When there are no pins
+ * yet, shows an empty US-centered map so the frame doesn't collapse.
+ *
+ * Stops arrive as one ordered list rather than a named pickup and delivery:
+ * a load may have several of each, and what the map draws is the sequence —
+ * A, B, C… down the run — with colour carrying which kind each call is.
  *
  * Provider-agnostic at the call site — internally switches on the active
  * integration slug (via useMapProvider). Google Maps is the only branch
@@ -24,10 +28,15 @@ export interface LoadMapPin {
   label?: string;
 }
 
+/** A pin that knows which end of the run it belongs to, for its colour. */
+export interface LoadMapStop extends LoadMapPin {
+  kind: "pickup" | "delivery";
+}
+
 export interface LoadMapProps {
-  pickup?:   LoadMapPin | null;
-  delivery?: LoadMapPin | null;
-  truck?:    LoadMapPin | null;
+  /** In travel order. Letters and the drawn route follow this order. */
+  stops?:  LoadMapStop[];
+  truck?:  LoadMapPin | null;
   /** Height of the map area. Default fills the section (min 320px). */
   className?: string;
 }
@@ -73,10 +82,11 @@ function MapShell({ className, children }: { className?: string; children: React
 
 // ─── Google Maps branch ──────────────────────────────────────────────────────
 
-function GoogleLoadMap({ apiKey, pickup, delivery, truck, className }: LoadMapProps & { apiKey: string }) {
+function GoogleLoadMap({ apiKey, stops = [], truck, className }: LoadMapProps & { apiKey: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef       = useRef<GMap | null>(null);
   const markersRef   = useRef<Record<string, GMarker>>({});
+  const routeRef     = useRef<GDirectionsRenderer | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,7 +104,12 @@ function GoogleLoadMap({ apiKey, pickup, delivery, truck, className }: LoadMapPr
         const map = new google.maps.Map(containerRef.current, {
           center: USA_CENTER,
           zoom:   USA_ZOOM,
+          // Everything off, then back on only what the design shows: a zoom
+          // pair and the expand button. Street View, map-type and the rest
+          // have no job on a dispatch readout.
           disableDefaultUI:  true,
+          zoomControl:       true,
+          fullscreenControl: true,
           keyboardShortcuts: false,
           clickableIcons:    false,
           styles: isDark ? DARK_MAP_STYLE : LIGHT_MAP_STYLE,
@@ -115,8 +130,8 @@ function GoogleLoadMap({ apiKey, pickup, delivery, truck, className }: LoadMapPr
 
   // Stable JSON view of pin inputs so the sync effect isn't over-invalidated.
   const pinsKey = useMemo(
-    () => JSON.stringify({ pickup, delivery, truck }),
-    [pickup, delivery, truck],
+    () => JSON.stringify({ stops, truck }),
+    [stops, truck],
   );
 
   // Sync pins whenever the pin inputs change (or the map finishes booting).
@@ -126,10 +141,18 @@ function GoogleLoadMap({ apiKey, pickup, delivery, truck, className }: LoadMapPr
     if (!google) return;
     const map = mapRef.current;
 
+    // A, B, C… name the calls of the run the way a rate confirmation does, in
+    // travel order, green for a pickup and red for a drop. The truck is a
+    // plain dot because it is a position, not a stop.
     const desired: Array<{ id: string; pin: LoadMapPin; icon: string }> = [];
-    if (pickup)   desired.push({ id: "pickup",   pin: pickup,   icon: dotSvg("#10b981") });
-    if (delivery) desired.push({ id: "delivery", pin: delivery, icon: dotSvg("#ef4444") });
-    if (truck)    desired.push({ id: "truck",    pin: truck,    icon: dotSvg("#3b82f6") });
+    stops.forEach((stop, i) => {
+      desired.push({
+        id:   `stop-${i}`,
+        pin:  stop,
+        icon: pinSvg(stop.kind === "pickup" ? "#10b981" : "#ef4444", stopLetter(i)),
+      });
+    });
+    if (truck) desired.push({ id: "truck", pin: truck, icon: dotSvg("#3b82f6") });
 
     // Drop stale markers.
     for (const id of Object.keys(markersRef.current)) {
@@ -143,7 +166,12 @@ function GoogleLoadMap({ apiKey, pickup, delivery, truck, className }: LoadMapPr
       const pos: GLatLngLit = { lat: pin.lat, lng: pin.lng };
       const existing = markersRef.current[id];
       if (existing) {
+        // Position *and* icon: ids are positional, so removing a stop shifts
+        // every later one up a slot and a pin that kept its old glyph would
+        // be lettered for where it used to be in the run.
         existing.setPosition(pos);
+        existing.setIcon({ url: icon });
+        existing.setTitle(pin.label);
       } else {
         markersRef.current[id] = new google.maps.Marker({
           map,
@@ -170,6 +198,72 @@ function GoogleLoadMap({ apiKey, pickup, delivery, truck, className }: LoadMapPr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, pinsKey]);
 
+  /**
+   * The driven route through the run, as a line.
+   *
+   * Drawn client-side from the already-loaded Maps SDK rather than from our
+   * own route endpoint: Distance Matrix (what RoutingService calls) returns
+   * distance and duration but no geometry, so there is nothing on the server
+   * to draw. Stops between the ends go in as waypoints, so a multi-stop load
+   * traces the order it will actually be run in instead of a straight shot
+   * from first to last. Failures are silent by design — Directions is a
+   * separately enabled API, and a missing line is not worth an error over a
+   * map that still shows every pin.
+   *
+   * The strip above the map is a separate question and still measures the
+   * loaded leg end to end; these waypoints change the drawing, not the miles.
+   */
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    const google = getGoogleNamespace();
+    const Service  = google?.maps.DirectionsService;
+    const Renderer = google?.maps.DirectionsRenderer;
+
+    const clear = () => {
+      routeRef.current?.setMap(null);
+      routeRef.current = null;
+    };
+
+    if (stops.length < 2 || !Service || !Renderer) { clear(); return; }
+
+    const first = stops[0];
+    const last  = stops[stops.length - 1];
+
+    let cancelled = false;
+    try {
+      new Service().route(
+        {
+          origin:      { lat: first.lat, lng: first.lng },
+          destination: { lat: last.lat,  lng: last.lng },
+          waypoints:   stops.slice(1, -1).map(s => ({
+            location: { lat: s.lat, lng: s.lng },
+            stopover: true,
+          })),
+          travelMode:  "DRIVING",
+        },
+        (result, status) => {
+          if (cancelled || status !== "OK" || !mapRef.current) return;
+          clear();
+          const renderer = new Renderer({
+            map: mapRef.current,
+            directions: result,
+            // Our own lettered pins already mark every call, and fitBounds
+            // above has already framed the run.
+            suppressMarkers:  true,
+            preserveViewport: true,
+            polylineOptions: { strokeColor: "#2563eb", strokeWeight: 4, strokeOpacity: 0.9 },
+          });
+          routeRef.current = renderer;
+        },
+      );
+    } catch {
+      clear();
+    }
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, pinsKey]);
+
   if (error) {
     return (
       <MapShell className={className}>
@@ -183,6 +277,25 @@ function GoogleLoadMap({ apiKey, pickup, delivery, truck, className }: LoadMapPr
 // Inline SVG data-URL for a colored dot marker. Keeps the map self-contained
 // (no icon hosting) and avoids pulling in @types/google.maps for real Marker
 // symbols.
+/** Teardrop pin carrying its letter. Baked into the SVG so the label needs
+ *  no labelOrigin Point, which would mean widening the Maps type shim. */
+function pinSvg(color: string, letter: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+    <path d="M14 0C6.8 0 1 5.8 1 13c0 9.2 11.4 21.6 12 22.3.3.4.9.4 1.2 0C14.6 34.6 27 22.2 27 13 27 5.8 21.2 0 14 0z" fill="${color}" stroke="white" stroke-width="2"/>
+    <text x="14" y="18" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="white">${letter}</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * A, B, C… for the run's calls. Past Z the letter stops being a label and
+ * becomes a puzzle, so the number takes over — a 27-stop load is not a thing
+ * anybody dispatches, but neither is a pin reading "[".
+ */
+function stopLetter(index: number): string {
+  return index < 26 ? String.fromCharCode(65 + index) : String(index + 1);
+}
+
 function dotSvg(color: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
     <circle cx="10" cy="10" r="7" fill="${color}" stroke="white" stroke-width="2.5"/>

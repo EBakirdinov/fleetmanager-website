@@ -6,9 +6,19 @@ export interface StateOption { value: string; label: string; }
 export interface IntegrationField {
   key: string;
   label: string;
-  type: 'text' | 'password';
+  type: 'text' | 'password' | 'checkbox';
   required: boolean;
+  /**
+   * Starting value for a field the company hasn't saved yet. Only meaningful
+   * for checkbox — credentials always start empty.
+   */
+  default?: boolean;
+  /** Shown under the field. Says what turning it off actually costs. */
+  hint?: string;
 }
+
+// IntegrationProbeResult lives in ./api — this module imports from there, so
+// the type has to sit on that side of the dependency to stay acyclic.
 
 export interface IntegrationDef {
   slug: string;
@@ -32,6 +42,7 @@ export interface RefData {
   truckCabTypes: string[];
   truckSleeperSizes: string[];
   truckEngineTypes: string[];
+  loadTypes: string[];
   trailerTypes: string[];
   trailerDoorTypes: string[];
   trailerRoofTypes: string[];

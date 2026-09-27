@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { ChangeEvent, ElementType, ReactNode } from "react";
 import { Check, FileUp, Loader2, MoreVertical, Save, Trash2, Upload, X } from "lucide-react";
 import {
-  Sheet, SheetHeader, Row, Cell, TextCell, SelectCell, TextareaCell, bandCls, formMetrics,
+  Sheet, SheetHeader, SheetBody, Row, Cell, TextCell, SelectCell, TextareaCell, bandCls, formMetrics,
 } from "./cells";
 
 export function KpiCard({ label, value, sub, icon: Icon, accent, active, onClick }: {
@@ -156,6 +156,126 @@ export function SlideDrawer({ open, onClose, title, badge, titleExtra, children,
 }
 
 /**
+ * A centred dialog.
+ *
+ * Distinct from SlideDrawer, which is for working through a record at length
+ * beside the page it came from. A modal is for one decision, made and
+ * dismissed — it takes the middle of the screen precisely because there is
+ * nothing else to attend to until it is answered.
+ *
+ * Portalled to the body so a card's overflow-hidden can never clip it, and
+ * Escape closes it: a dialog whose only exit is finding the right button is
+ * a trap. The overlay dismisses on mousedown-and-up over itself, so a text
+ * selection that happens to end outside the panel does not close the dialog
+ * and throw away what was typed.
+ */
+export function Modal({ open, onClose, title, subtitle, children, footer, width = 560 }: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+  /** Buttons along the bottom, right-aligned. */
+  footer?: ReactNode;
+  /** Max width in px. The panel is narrower on a small screen. */
+  width?: number;
+}) {
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+
+    // The page behind must not scroll under the dialog.
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="w-full bg-card border border-border rounded-xl flex flex-col max-h-[90vh]"
+        style={{ maxWidth: width, boxShadow: "0 16px 48px rgba(0,0,0,0.4)" }}
+      >
+        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 flex-shrink-0">
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-foreground">{title}</p>
+            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer flex-shrink-0"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto scroll-thin px-5 pb-4 space-y-3.5" style={formMetrics}>
+          {children}
+        </div>
+
+        {footer && (
+          <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-border flex-shrink-0">
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * An on/off switch.
+ *
+ * For a setting that reads as a state the thing is in — "included on the rate
+ * confirmation" — rather than an item being ticked off a list. A checkbox
+ * says "selected"; this says "on", and the difference is worth a component.
+ */
+export function Switch({ checked, onChange, label }: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  /** Announced to screen readers; the visible text lives beside the switch. */
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative w-10 h-[22px] rounded-full flex-shrink-0 cursor-pointer transition-colors
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+        checked ? "bg-primary" : "bg-muted-foreground/30 hover:bg-muted-foreground/45"
+      }`}
+    >
+      <span
+        className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-[left] ${
+          checked ? "left-[21px]" : "left-[3px]"
+        }`}
+        style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}
+      />
+    </button>
+  );
+}
+
+/**
  * A titled sheet inside a drawer. Every direct child becomes a hairline-
  * separated band: a DrawerFieldRow pairs two cells, a bare field spans the
  * full width. The shared cell kit in lib/cells.tsx does the rest, so drawer
@@ -170,11 +290,31 @@ export function SlideDrawer({ open, onClose, title, badge, titleExtra, children,
  * keeps a thin bar visible and fades the content out at whichever edge has
  * more beyond it, so the cut always looks deliberate.
  */
-export function ScrollArea({ children, className = "", fadeHeight = 24 }: {
+export function ScrollArea({ children, className = "", contentClassName = "", fadeHeight = 24, fadeFrom = "card" }: {
   children: ReactNode;
   className?: string;
+  /**
+   * Classes for the wrapper that actually holds the children.
+   *
+   * It sits between the scroller and the content, so a percentage height set
+   * on a child of it resolves against `auto` and collapses to nothing — a
+   * column told to fill the scroller silently keeps its natural height
+   * instead. Anything that has to fill styles this wrapper rather than an
+   * element inside it.
+   *
+   * The wrapper stays in place regardless: the fades are measured from it,
+   * because the scroller's own box doesn't change when its contents grow.
+   */
+  contentClassName?: string;
   /** Height of the fade in px. Smaller for short lists. */
   fadeHeight?: number;
+  /**
+   * The surface the fade blends into. The default suits a scroller inside a
+   * card, which is where most of them live; a column laid straight onto the
+   * page needs "background", or the fade reads as a pale band sitting over a
+   * darker ground instead of the content running out under an edge.
+   */
+  fadeFrom?: "card" | "background";
 }) {
   const scroller = useRef<HTMLDivElement | null>(null);
   const content  = useRef<HTMLDivElement | null>(null);
@@ -206,20 +346,24 @@ export function ScrollArea({ children, className = "", fadeHeight = 24 }: {
     };
   }, []);
 
+  // Written out in full rather than composed — Tailwind scans source for
+  // literal class names and would never emit a `from-${…}` it can't read.
+  const from = fadeFrom === "background" ? "from-background" : "from-card";
+
   return (
     <div className="relative flex-1 min-h-0">
       <div ref={scroller} className={`h-full overflow-y-auto scroll-thin ${className}`}>
-        <div ref={content}>{children}</div>
+        <div ref={content} className={contentClassName}>{children}</div>
       </div>
       <div
         aria-hidden
         style={{ height: fadeHeight }}
-        className={`pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-card to-transparent transition-opacity duration-150 ${edge.top ? "opacity-100" : "opacity-0"}`}
+        className={`pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b ${from} to-transparent transition-opacity duration-150 ${edge.top ? "opacity-100" : "opacity-0"}`}
       />
       <div
         aria-hidden
         style={{ height: fadeHeight }}
-        className={`pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-card to-transparent transition-opacity duration-150 ${edge.bottom ? "opacity-100" : "opacity-0"}`}
+        className={`pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t ${from} to-transparent transition-opacity duration-150 ${edge.bottom ? "opacity-100" : "opacity-0"}`}
       />
     </div>
   );
@@ -229,7 +373,7 @@ export function DrawerSection({ title, children }: { title: string; children: Re
   return (
     <Sheet>
       <SheetHeader lead={<div className="w-1 h-4 bg-primary rounded-full" />} title={title} />
-      {children}
+      <SheetBody>{children}</SheetBody>
     </Sheet>
   );
 }
@@ -311,6 +455,16 @@ export function ToggleButton({ label, active, onToggle }: {
   );
 }
 
+/**
+ * One code in a multi-select row — a CDL endorsement, and anything else that
+ * is a set of independent on/off letters rather than one choice out of many.
+ *
+ * Picked is a fill, not a tint: a 15%-alpha wash read as "slightly different"
+ * next to five other buttons rather than as the answer. Unpicked keeps a
+ * surface and a border of its own so it still looks pressable — it is the
+ * state most of these spend their life in, and a bare letter on a panel gives
+ * no clue that it does anything.
+ */
 export function CodeToggle({ code, label, active, onToggle }: {
   code: string;
   label: string;
@@ -321,8 +475,16 @@ export function CodeToggle({ code, label, active, onToggle }: {
     <button
       type="button"
       title={label}
+      aria-pressed={active}
+      aria-label={`${label} (${code})`}
       onClick={onToggle}
-      className={`flex-1 py-2 rounded text-xs font-mono font-bold border transition-colors ${active ? "bg-primary/15 border-primary/50 text-primary" : "border-border text-muted-foreground hover:border-white/20 hover:text-foreground"}`}
+      className={`flex-1 py-2 rounded-md text-xs font-mono font-bold border cursor-pointer
+                  transition-colors focus:outline-none focus-visible:ring-2
+                  focus-visible:ring-primary/40 ${
+        active
+          ? "bg-primary border-primary text-primary-foreground"
+          : "bg-card border-border text-foreground/70 hover:bg-muted hover:text-foreground hover:border-muted-foreground/40"
+      }`}
     >
       {code}
     </button>
@@ -360,7 +522,7 @@ export function DrawerFileField({
   }
 
   return (
-    <Cell label={label} as="div">
+    <Cell label={label} as="div" boxed={false}>
       <div className="relative" title={hint ?? label}>
         <button
           type="button"

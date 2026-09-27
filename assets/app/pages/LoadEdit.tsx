@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ArrowLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Btn } from "../lib/ui";
@@ -21,8 +21,9 @@ import DeliveryDetailsSection, {
 import EquipmentSection, {
   emptyEquipmentForm, equipmentFormToPayload, type EquipmentFormState,
 } from "../components/loads/EquipmentSection";
+import { linesFromApi } from "../components/loads/accessorials";
 import RateCostSection, {
-  emptyRateCostForm, rateCostFormToPayload, type RateCostFormState,
+  rateCostFormToPayload, type RateCostFormState,
 } from "../components/loads/RateCostSection";
 import NotesSection, {
   emptyNotesForm, notesFormToPayload, type NotesFormState,
@@ -31,6 +32,7 @@ import StatusTimeline from "../components/loads/StatusTimeline";
 import AdditionalInfoSection from "../components/loads/AdditionalInfoSection";
 import type { LoadMapPin } from "../components/loads/LoadMap";
 import { toWeatherPreview } from "../components/loads/weatherPreview";
+import { toRouteKpis, useRouteSummary, useTruckPin } from "../components/loads/routeSummary";
 
 /**
  * Load control page — the detail view and the edit form in one.
@@ -50,6 +52,11 @@ import { toWeatherPreview } from "../components/loads/weatherPreview";
  *     the stop sections PATCH their stop, everything else PATCHes the load.
  *     A dispatcher fixing a phone number never risks overwriting the rate
  *     someone else changed while the page was open.
+ *
+ * Stops are still the first pickup and the last delivery here, even on a load
+ * the Add page built with more: editing one in place is a PATCH to a stop
+ * that exists, while adding or dropping one after the fact needs POST and
+ * DELETE routes that LoadStopController does not expose yet.
  */
 export default function LoadEdit() {
   const { id }   = useParams<{ id?: string }>();
@@ -89,15 +96,31 @@ export default function LoadEdit() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const pickupStop   = load ? findStop(load, "pickup")   : null;
-  const deliveryStop = load ? findStop(load, "delivery") : null;
+  const pickupStop   = load ? firstStop(load, "pickup")  : null;
+  const deliveryStop = load ? lastStop(load, "delivery") : null;
 
   const pickupPin   = livePickupPin   ?? pinOf(pickupStop);
   const deliveryPin = liveDeliveryPin ?? pinOf(deliveryStop);
 
-  // Weather needs a place and a day. Window bounds sharpen it: with both set
-  // the backend returns one window-aggregated reading, otherwise four
-  // time-of-day buckets.
+  // Every stop in sequence — the trip the truck drives, which on a load that
+  // calls somewhere in the middle is longer than the line between its ends.
+  // The two the form can re-geocode take their live pin when there is one, so
+  // editing an address re-routes against the new place rather than the saved
+  // one. Stops without coordinates stay null: the route is then unmeasurable,
+  // not shorter.
+  const routePins = useMemo(
+    () => (load?.stops ?? []).map(stop => {
+      if (stop === pickupStop   && livePickupPin)   return livePickupPin;
+      if (stop === deliveryStop && liveDeliveryPin) return liveDeliveryPin;
+
+      return pinOf(stop);
+    }),
+    [load?.stops, pickupStop, deliveryStop, livePickupPin, liveDeliveryPin],
+  );
+
+  // Weather needs a place and a day, and answers with a four-day outlook
+  // from that day. Window bounds sharpen it: with both set the response adds
+  // a reading covering just the appointment hours.
   const pickupDate   = pickupStop?.date   ?? null;
   const pickupFrom   = pickupStop?.window_start ?? "";
   const pickupTo     = pickupStop?.window_end   ?? "";
@@ -124,6 +147,14 @@ export default function LoadEdit() {
       .catch(() => { if (!cancelled) setDeliveryWeather(null); });
     return () => { cancelled = true; };
   }, [deliveryPin?.lat, deliveryPin?.lng, deliveryDate, deliveryFrom, deliveryTo, deliveryLabel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The routed figures behind Section 1's strip, the RPM cells under it, and
+  // the per-mile hints in Rate & Cost. Matched on driver name: unlike the Add
+  // page, this page knows who is driving but not which truck they took.
+  const assignedDriver = load?.driver ? driverLabel(load.driver) : null;
+  const truckPin       = useTruckPin(null, assignedDriver);
+  const route          = useRouteSummary(routePins, truckPin);
+  const kpis           = toRouteKpis(route);
 
   if (loading) {
     return <Centered>Loading load…</Centered>;
@@ -181,65 +212,89 @@ export default function LoadEdit() {
       </div>
 
       {/* §1 Route overview + the at-a-glance strip */}
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-3">
         <BasicInfoSection
-          pickup={pickupPin}
-          delivery={deliveryPin}
-          pickupWeather={pickupWeather}
-          deliveryWeather={deliveryWeather}
+          stops={[
+            ...(pickupPin   ? [{ ...pickupPin,   kind: "pickup"   as const }] : []),
+            ...(deliveryPin ? [{ ...deliveryPin, kind: "delivery" as const }] : []),
+          ]}
+          truck={truckPin}
+          weather={[
+            { label: "Pickup",   kind: "pickup",   data: pickupWeather   },
+            { label: "Delivery", kind: "delivery", data: deliveryWeather },
+          ]}
           aside={<StatusTimeline status={load.status} />}
+          stopsAwaitingAddress={routePins.filter(p => !p).length}
+          {...kpis}
         />
-        <div className="bg-card border border-t-0 border-border rounded-b-lg -mt-px">
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
           <LoadSummaryStrip
             value={{
               reference:  load.reference_number,
               status:     load.status,
               rate:       load.rate === null || load.rate === undefined ? null : Number(load.rate),
-              driverName: load.driver ? driverLabel(load.driver) : null,
+              loadedMiles: route?.loaded_miles ?? null,
+              totalMiles:  route?.total_miles  ?? null,
+              milesSource: route?.source ?? null,
+              driverName: assignedDriver,
             }}
           />
         </div>
       </div>
 
-      {/* §2 §3 §4 */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 items-start">
+      {/* §2 */}
+      <EditableSection
+        value={pickupFormOf(pickup)}
+        onSave={draft => saveStop(pickup, pickupFormToStopPayload(draft))}
+      >
+        {(draft, patch) => (
+          <PickupDetailsSection value={draft} onChange={patch} onGeocode={setLivePickupPin} />
+        )}
+      </EditableSection>
+
+      {/* §3 */}
+      <EditableSection
+        value={deliveryFormOf(delivery)}
+        onSave={draft => saveStop(delivery, deliveryFormToStopPayload(draft))}
+      >
+        {(draft, patch) => (
+          <DeliveryDetailsSection value={draft} onChange={patch} onGeocode={setLiveDeliveryPin} />
+        )}
+      </EditableSection>
+
+      {/* §4 */}
+      <EditableSection
+        value={equipmentFormOf(load)}
+        onSave={draft => saveLoad(equipmentFormToPayload(draft))}
+      >
+        {(draft, patch) => <EquipmentSection value={draft} onChange={patch} sectionNumber={4} />}
+      </EditableSection>
+
+      {/* §5 and §6, half each — the same pairing the Add page makes, for the
+          same reason: neither fills a page-wide row on its own. The ledger is
+          a narrow column of figures with acres of empty band beside it, and
+          the notes are three boxes that only need to be wide enough to write
+          in. items-start so the collapsed ledger keeps its own height instead
+          of stretching to match the notes beside it.
+
+          Each half is its own EditableSection, so the one-section-at-a-time
+          rule still holds: opening Notes leaves the ledger at rest. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
         <EditableSection
-          value={pickupFormOf(pickup)}
-          onSave={draft => saveStop(pickup, pickupFormToStopPayload(draft))}
+          value={rateFormOf(load)}
+          onSave={draft => saveLoad(rateCostFormToPayload(draft))}
         >
           {(draft, patch) => (
-            <PickupDetailsSection value={draft} onChange={patch} onGeocode={setLivePickupPin} />
+            <RateCostSection
+              value={draft} onChange={patch} sectionNumber={5}
+              totalMiles={route?.total_miles ?? null}
+              milesSource={route?.source ?? null}
+            />
           )}
         </EditableSection>
 
-        <EditableSection
-          value={deliveryFormOf(delivery)}
-          onSave={draft => saveStop(delivery, deliveryFormToStopPayload(draft))}
-        >
-          {(draft, patch) => (
-            <DeliveryDetailsSection value={draft} onChange={patch} onGeocode={setLiveDeliveryPin} />
-          )}
-        </EditableSection>
-
-        <EditableSection
-          value={equipmentFormOf(load)}
-          onSave={draft => saveLoad(equipmentFormToPayload(draft))}
-        >
-          {(draft, patch) => <EquipmentSection value={draft} onChange={patch} />}
-        </EditableSection>
-      </div>
-
-      {/* §5 §6 */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 items-start">
-        <div className="xl:col-span-2">
-          <EditableSection
-            value={rateFormOf(load)}
-            onSave={draft => saveLoad(rateCostFormToPayload(draft))}
-          >
-            {(draft, patch) => <RateCostSection value={draft} onChange={patch} sectionNumber={5} />}
-          </EditableSection>
-        </div>
-
+        {/* Stacked rather than three-up: a third of a half-width card is not
+            a place to write a paragraph. */}
         <EditableSection
           value={notesFormOf(load)}
           onSave={draft => saveLoad(notesFormToPayload(draft))}
@@ -256,6 +311,8 @@ export default function LoadEdit() {
         value={{
           origin:      load.origin,
           destination: load.destination,
+          totalMiles:  route?.total_miles ?? null,
+          milesSource: route?.source ?? null,
           companyName: load.company?.name,
           createdAt:   load.created_at,
           updatedAt:   load.updated_at,
@@ -275,8 +332,28 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
-function findStop(load: LoadItem, type: string): LoadStopItem | null {
+/**
+ * The run's two ends — the same pair the load caches into its own origin,
+ * destination, pickup_date and delivery_date columns, and the same pair the
+ * Add page routes between.
+ *
+ * It matters which one is picked once a load has more than two stops: the
+ * first delivery of a three-drop run is a call on the way, not where the
+ * freight ends up, and showing it here would put a different city in Delivery
+ * Details than in the Destination the page reports two sections further down.
+ * Stops arrive ordered by sequence, so first and last are travel order.
+ */
+function firstStop(load: LoadItem, type: string): LoadStopItem | null {
   return (load.stops ?? []).find(s => s.type === type) ?? null;
+}
+
+function lastStop(load: LoadItem, type: string): LoadStopItem | null {
+  const stops = load.stops ?? [];
+  for (let i = stops.length - 1; i >= 0; i--) {
+    if (stops[i].type === type) return stops[i];
+  }
+
+  return null;
 }
 
 function pinOf(stop: LoadStopItem | null): LoadMapPin | null {
@@ -285,17 +362,8 @@ function pinOf(stop: LoadStopItem | null): LoadMapPin | null {
   return { lat: stop.latitude, lng: stop.longitude, label: stop.facility_name ?? "" };
 }
 
-/** "2026-05-04T14:15:00+00:00" → ["2026-05-04", "14:15"] */
-function splitStamp(raw?: string | null): [string, string] {
-  if (!raw) return ["", ""];
-  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(raw);
-
-  return m ? [m[1], m[2]] : ["", ""];
-}
-
 function pickupFormOf(stop: LoadStopItem | null): PickupFormState {
   if (!stop) return emptyPickupForm();
-  const [confirmedDate, confirmedTime] = splitStamp(stop.confirmed_on);
 
   return {
     facilityName:   stop.facility_name   ?? "",
@@ -309,15 +377,11 @@ function pickupFormOf(stop: LoadStopItem | null): PickupFormState {
     phone:          stop.phone           ?? "",
     schedulingType: stop.scheduling_type ?? "",
     reference:      stop.reference       ?? "",
-    confirmedDate,
-    confirmedTime,
-    confirmedBy:    stop.confirmed_by    ?? "",
   };
 }
 
 function deliveryFormOf(stop: LoadStopItem | null): DeliveryFormState {
   if (!stop) return emptyDeliveryForm();
-  const [etaDate, etaTime] = splitStamp(stop.eta);
 
   return {
     facilityName:  stop.facility_name  ?? "",
@@ -326,15 +390,12 @@ function deliveryFormOf(stop: LoadStopItem | null): DeliveryFormState {
     windowStart:   stop.window_start   ?? "",
     windowEnd:     stop.window_end     ?? "",
     contactPerson: stop.contact_person ?? "",
-    etaDate,
-    etaTime,
     phone:         stop.phone          ?? "",
     instructions:  stop.instructions   ?? "",
     reference:     stop.reference      ?? "",
     podRequired:   stop.pod_required   ?? false,
-    hoursStart:    stop.hours_start    ?? "",
-    hoursEnd:      stop.hours_end      ?? "",
     storeDc:       stop.store_dc       ?? "",
+    schedulingType: stop.scheduling_type ?? "",
   };
 }
 
@@ -345,6 +406,7 @@ const yesNo = (v?: boolean | null): "" | "yes" | "no" =>
 function equipmentFormOf(load: LoadItem): EquipmentFormState {
   return {
     ...emptyEquipmentForm(),
+    loadType:       load.load_type         ?? "",
     trailerType:    load.trailer_type      ?? "",
     temperature:    load.temperature       ?? "",
     weightLbs:      load.weight_lbs == null ? "" : String(load.weight_lbs),
@@ -356,17 +418,12 @@ function equipmentFormOf(load: LoadItem): EquipmentFormState {
   };
 }
 
-const moneyStr = (v?: number | null): string => (v == null ? "" : String(v));
-
+/**
+ * The breakdown is the stored lines laid over the full catalog, so every
+ * named line is on screen whether or not this load has a row for it.
+ */
 function rateFormOf(load: LoadItem): RateCostFormState {
-  return {
-    ...emptyRateCostForm(),
-    lineHaulRate:  moneyStr(load.line_haul_rate),
-    fuelSurcharge: moneyStr(load.fuel_surcharge),
-    accessorials:  moneyStr(load.accessorials),
-    detention:     moneyStr(load.detention),
-    estimatedCost: moneyStr(load.estimated_cost),
-  };
+  return { lines: linesFromApi(load.accessorial_lines) };
 }
 
 function notesFormOf(load: LoadItem): NotesFormState {

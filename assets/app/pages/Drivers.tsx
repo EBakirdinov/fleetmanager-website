@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, type ReactNode } from "react";
 import {
-  Users, AlertTriangle, Clock, Shield, Pencil, Plus, Trash2,
+  Users, AlertTriangle, Clock, Shield, Pencil, Plus, Trash2, CalendarOff,
 } from "lucide-react";
 import {
   KpiCard, StatusPill, Btn, SlideDrawer, DrawerSection, DrawerFieldRow,
@@ -232,6 +232,7 @@ function DriverFormFields({
         <Select label="Status" value={form.status} onChange={v => set("status", v)}>
           <option value="active">Active</option>
           <option value="off_duty">Off Duty</option>
+          <option value="on_leave">On Leave</option>
           <option value="suspended">Suspended</option>
         </Select>
       </DrawerSection>
@@ -316,10 +317,10 @@ const DOCUMENT_SLOTS: { type: DriverDocumentType; label: string; hint?: string }
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
 const DRIVER_STATUS_LABEL: Record<string, string> = {
-  active: "Active", off_duty: "Off Duty", suspended: "Suspended", terminated: "Terminated",
+  active: "Active", off_duty: "Off Duty", on_leave: "On Leave", suspended: "Suspended", terminated: "Terminated",
 };
 const DRIVER_STATUS_COLOR: Record<string, string> = {
-  active: "#10b981", off_duty: "#f59e0b", suspended: "#ef4444", terminated: "#6b7e96",
+  active: "#10b981", off_duty: "#f59e0b", on_leave: "#38bdf8", suspended: "#ef4444", terminated: "#6b7e96",
 };
 
 // ─── Expiry helpers ──────────────────────────────────────────────────────────
@@ -579,6 +580,7 @@ export default function Drivers() {
   const kpiAll       = items.length;
   const kpiActive    = items.filter(d => d.status === "active").length;
   const kpiOffDuty   = items.filter(d => d.status === "off_duty").length;
+  const kpiOnLeave   = items.filter(d => d.status === "on_leave").length;
   const kpiSuspended = items.filter(d => d.status === "suspended").length;
   const kpiMedExp    = items.filter(d => {
     if (!d.medical_cert_expiration_date) return false;
@@ -600,6 +602,7 @@ export default function Drivers() {
   const filtered = statusFilter === "all"           ? items
                  : statusFilter === "active"        ? items.filter(d => d.status === "active")
                  : statusFilter === "off_duty"      ? items.filter(d => d.status === "off_duty")
+                 : statusFilter === "on_leave"      ? items.filter(d => d.status === "on_leave")
                  : statusFilter === "suspended"     ? items.filter(d => d.status === "suspended")
                  : statusFilter === "med_expiring"  ? items.filter(d => withinDays(d.medical_cert_expiration_date))
                  : statusFilter === "lic_expiring"  ? items.filter(d => withinDays(d.license_expiration))
@@ -619,6 +622,7 @@ export default function Drivers() {
           <KpiCard label="All Drivers"    value={kpiAll}       icon={Users}         accent="#6b7e96" active={statusFilter === "all"}       onClick={() => setStatusFilter("all")} />
           <KpiCard label="Active"         value={kpiActive}    icon={Users}         accent="#10b981" active={statusFilter === "active"}    onClick={() => setStatusFilter("active")} />
           <KpiCard label="Off Duty"       value={kpiOffDuty}   icon={Clock}         accent="#f59e0b" active={statusFilter === "off_duty"}  onClick={() => setStatusFilter("off_duty")} />
+          <KpiCard label="On Leave"       value={kpiOnLeave}   icon={CalendarOff}   accent="#38bdf8" active={statusFilter === "on_leave"}  onClick={() => setStatusFilter("on_leave")} />
           <KpiCard label="Suspended"      value={kpiSuspended} icon={AlertTriangle} accent="#ef4444" active={statusFilter === "suspended"} onClick={() => setStatusFilter("suspended")} />
           <KpiCard label="Med Expiring"   value={kpiMedExp}    icon={Clock}         accent="#f59e0b" sub="Within 90 days" active={statusFilter === "med_expiring"} onClick={() => setStatusFilter("med_expiring")} />
           <KpiCard label="Lic. Expiring"  value={kpiLicExp}    icon={Shield}        accent="#8b5cf6" sub="Within 90 days" active={statusFilter === "lic_expiring"} onClick={() => setStatusFilter("lic_expiring")} />
@@ -673,6 +677,7 @@ export default function Drivers() {
                             <div
                               className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-semibold flex-shrink-0"
                               style={{ backgroundColor: `${DRIVER_STATUS_COLOR[d.status] ?? "#6b7e96"}20`, color: DRIVER_STATUS_COLOR[d.status] ?? "#6b7e96" }}
+                              title={DRIVER_STATUS_LABEL[d.status] ?? d.status}
                             >
                               {driverInitials(d)}
                             </div>

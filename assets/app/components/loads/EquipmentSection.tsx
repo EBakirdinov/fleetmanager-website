@@ -1,23 +1,31 @@
+import { Boxes, Package, Scale, Thermometer } from "lucide-react";
 import { useRefData } from "../../lib/data";
-import { SectionCard, Row, TextCell, SelectCell, ChoiceCell } from "../../lib/cells";
+import { SectionCard, Row, TextCell, SelectCell, SelectOtherCell, ChoiceCell } from "../../lib/cells";
 
 /**
- * Section 4 — Equipment Requirements (controlled).
+ * Equipment Requirements (controlled).
  *
- * Spec-sheet layout matching Pickup / Delivery:
+ * Three-up layout matching Pickup / Delivery:
  *
- *   Trailer Type  | Temperature
- *   Weight (lbs)  | Pallets / Pieces
- *   Commodity     | Straps / Load Bars
- *   Hazmat        | Seal Required
+ *   Load Type          | Trailer Type   | Temperature
+ *   Weight (lbs)       | Pallets/Pieces | Commodity
+ *   Straps / Load Bars | Hazmat         | Seal Required
+ *
+ * Load Type leads: it says how the freight moves (FTL, LTL, Drayage…), which
+ * is the frame everything under it is read against.
  *
  * The two yes/no answers are segmented pills rather than dropdowns — they
  * are the fields a dispatcher scans for, so they should be readable without
  * opening a menu, and Hazmat: Yes carries a danger tone so it stands out.
  *
- * Trailer Type comes from the shared catalog (DataManager.trailerTypes).
+ * Load Type and Trailer Type come from the shared catalogs
+ * (DataManager.loadTypes / trailerTypes).
  * Temperature / Commodity / Straps live as small enums here — they'll
  * migrate to DataManager if additional consumers appear.
+ *
+ * Commodity's list can't be exhaustive — freight is whatever shipped that
+ * day — so its "Other" opens a text field and the typed name is stored as
+ * the commodity itself, not as the word "Other".
  */
 
 // ─── Local enums (small; not worth a round-trip to DataManager yet) ─────────
@@ -30,9 +38,10 @@ const TEMPERATURE_OPTIONS = [
   "Heated",
 ];
 
+// "Other" is not listed: SelectOtherCell appends it as the typed branch.
 const COMMODITY_OPTIONS = [
   "Food", "Beverages", "Electronics", "Machinery", "Building Materials",
-  "Chemicals", "Paper Products", "Automotive", "Other",
+  "Chemicals", "Paper Products", "Automotive",
 ];
 
 const STRAPS_OPTIONS = ["None", "Straps", "Load Bars", "Both"];
@@ -40,6 +49,7 @@ const STRAPS_OPTIONS = ["None", "Straps", "Load Bars", "Both"];
 // ─── Form state + payload adapter ────────────────────────────────────────────
 
 export interface EquipmentFormState {
+  loadType:       string;
   trailerType:    string;
   temperature:    string;
   weightLbs:      string; // kept as string in form state; parsed to int on save
@@ -51,7 +61,7 @@ export interface EquipmentFormState {
 }
 
 export const emptyEquipmentForm = (): EquipmentFormState => ({
-  trailerType: "", temperature: "",
+  loadType: "", trailerType: "", temperature: "",
   weightLbs: "", palletsPieces: "",
   commodity: "", hazmat: "",
   sealRequired: "", strapsLoadBars: "",
@@ -60,6 +70,7 @@ export const emptyEquipmentForm = (): EquipmentFormState => ({
 export function equipmentFormToPayload(f: EquipmentFormState): Record<string, unknown> {
   const weight = f.weightLbs.trim();
   return {
+    loadType:       f.loadType       || null,
     trailerType:    f.trailerType    || null,
     temperature:    f.temperature    || null,
     weightLbs:      weight ? Number(weight) : null,
@@ -74,17 +85,30 @@ export function equipmentFormToPayload(f: EquipmentFormState): Record<string, un
 // ─── Section ─────────────────────────────────────────────────────────────────
 
 export default function EquipmentSection({
-  value, onChange,
+  value, onChange, sectionNumber = 4,
 }: {
   value:    EquipmentFormState;
   onChange: (patch: Partial<EquipmentFormState>) => void;
+  /**
+   * Numbered by the page, which owns the sequence: the Add page runs dispatch
+   * ahead of equipment, the control page has no dispatch section at all.
+   */
+  sectionNumber?: number;
 }) {
   const { data: refData } = useRefData();
+  const loadTypes    = refData?.loadTypes    ?? [];
   const trailerTypes = refData?.trailerTypes ?? [];
 
   return (
-    <SectionCard n={4} color="#f59e0b" title="Equipment Requirements">
-      <Row>
+    <SectionCard n={sectionNumber} color="#f59e0b" title="Equipment Requirements" collapsible defaultOpen={false} icon={Boxes}>
+      <Row cols={3}>
+        <SelectCell
+          label="Load Type" value={value.loadType} icon={Boxes}
+          onChange={v => onChange({ loadType: v })}
+        >
+          <option value="">— Select —</option>
+          {loadTypes.map(t => <option key={t} value={t}>{t}</option>)}
+        </SelectCell>
         <SelectCell
           label="Trailer Type" value={value.trailerType}
           onChange={v => onChange({ trailerType: v })}
@@ -93,7 +117,7 @@ export default function EquipmentSection({
           {trailerTypes.map(t => <option key={t} value={t}>{t}</option>)}
         </SelectCell>
         <SelectCell
-          label="Temperature" value={value.temperature}
+          label="Temperature" value={value.temperature} icon={Thermometer}
           onChange={v => onChange({ temperature: v })}
         >
           <option value="">— Select —</option>
@@ -101,27 +125,27 @@ export default function EquipmentSection({
         </SelectCell>
       </Row>
 
-      <Row>
+      <Row cols={3}>
         <TextCell
-          label="Weight (lbs)" type="number" value={value.weightLbs} mono
+          label="Weight (lbs)" type="number" value={value.weightLbs} mono icon={Scale}
           placeholder="42000"
           onChange={v => onChange({ weightLbs: v })}
         />
         <TextCell
-          label="Pallets / Pieces" value={value.palletsPieces} mono
+          label="Pallets / Pieces" value={value.palletsPieces} mono icon={Package}
           placeholder="20 / 30"
           onChange={v => onChange({ palletsPieces: v })}
         />
+        <SelectOtherCell
+          label="Commodity" value={value.commodity}
+          options={COMMODITY_OPTIONS}
+          placeholder="Type the commodity…"
+          maxLength={100}
+          onChange={v => onChange({ commodity: v })}
+        />
       </Row>
 
-      <Row>
-        <SelectCell
-          label="Commodity" value={value.commodity}
-          onChange={v => onChange({ commodity: v })}
-        >
-          <option value="">— Select —</option>
-          {COMMODITY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
-        </SelectCell>
+      <Row cols={3}>
         <SelectCell
           label="Straps / Load Bars" value={value.strapsLoadBars}
           onChange={v => onChange({ strapsLoadBars: v })}
@@ -129,9 +153,6 @@ export default function EquipmentSection({
           <option value="">— Select —</option>
           {STRAPS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </SelectCell>
-      </Row>
-
-      <Row>
         <ChoiceCell
           label="Hazmat" value={value.hazmat}
           options={[

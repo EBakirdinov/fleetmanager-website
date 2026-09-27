@@ -722,7 +722,7 @@ export default function Trucks() {
               <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    {["Truck", "Driver", "Status", "Location", "Eng. Hrs", "Federal Insp.", "State Insp.", ""].map(h => (
+                    {["Truck", "Driver", "Trailer", "Status", "Location", "Federal Insp.", "State Insp.", ""].map(h => (
                       <th key={h} className="text-left px-3 py-2.5 text-xs font-mono text-muted-foreground tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -764,6 +764,13 @@ export default function Trucks() {
                             : <span className="text-xs text-muted-foreground">—</span>}
                         </td>
 
+                        {/* Trailer currently hooked to this truck */}
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          {t.assigned_trailer
+                            ? <span className="text-xs font-mono text-foreground">{t.assigned_trailer.trailer_number ?? `#${t.assigned_trailer.id}`}</span>
+                            : <span className="text-xs text-muted-foreground">—</span>}
+                        </td>
+
                         {/* Status */}
                         <td className="px-3 py-2.5">
                           <StatusPill
@@ -786,11 +793,6 @@ export default function Trucks() {
                               </>
                             )
                             : <span className="text-xs text-muted-foreground">—</span>}
-                        </td>
-
-                        {/* Engine Hours */}
-                        <td className="px-3 py-2.5 text-xs font-mono text-foreground">
-                          {t.engine_hours != null ? t.engine_hours.toLocaleString() : "—"}
                         </td>
 
                         {/* Federal Inspection: date + status */}

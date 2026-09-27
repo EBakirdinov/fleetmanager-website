@@ -11,6 +11,12 @@ export interface AdditionalInfo {
   origin?:      string | null;
   destination?: string | null;
   totalMiles?:  number | null;
+  /**
+   * Whether `totalMiles` was measured or estimated. The label used to read
+   * "(est.)" for everything, from before routing could tell the difference —
+   * now that it can, calling a measured distance an estimate is wrong.
+   */
+  milesSource?: "routed" | "estimated" | null;
   companyName?: string | null;
   createdAt?:   string | null;
   updatedAt?:   string | null;
@@ -25,14 +31,18 @@ export default function AdditionalInfoSection({ value, sectionNumber = 10 }: {
     : value.origin || value.destination || null;
 
   return (
-    <SectionCard n={sectionNumber} color="#64748b" title="Additional Information">
+    <SectionCard n={sectionNumber} color="#64748b" title="Additional Information" collapsible>
       <Row cols={4}>
         <Info label="Route" value={route} wide />
         <Info label="Company" value={value.companyName} />
         {/* Mileage is routed, not stored — it only appears once a route has
             been calculated, so the cell is omitted rather than left dashed. */}
         {value.totalMiles ? (
-          <Info label="Miles (est.)" value={`${value.totalMiles.toLocaleString()} mi`} mono />
+          <Info
+            label={value.milesSource === "estimated" ? "Miles (approx.)" : "Miles"}
+            value={`${value.totalMiles.toLocaleString()} mi`}
+            mono
+          />
         ) : <span />}
       </Row>
       <Row cols={4}>
@@ -50,7 +60,7 @@ function Info({ label, value, mono, wide }: {
   wide?: boolean;
 }) {
   return (
-    <Cell label={label} wide={wide} as="div">
+    <Cell label={label} wide={wide} as="div" boxed={false}>
       <div className={`text-[length:var(--cell-fs)] ${mono ? "font-mono" : ""} ${value ? "text-foreground" : "text-muted-foreground/40"}`}>
         {value || "—"}
       </div>

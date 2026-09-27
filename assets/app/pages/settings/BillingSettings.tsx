@@ -41,12 +41,12 @@ export default function BillingSettings() {
   return (
     <SectionCard icon={CreditCard} title="Subscription" style={formMetrics}>
       <Row>
-        <Cell label="Current plan" as="div">
+        <Cell label="Current plan" as="div" boxed={false}>
           <span className="text-[length:var(--cell-fs)] text-foreground capitalize">
             {company?.plan ?? "—"}
           </span>
         </Cell>
-        <Cell label="Valid until" as="div" hint={note ?? undefined}>
+        <Cell label="Valid until" as="div" hint={note ?? undefined} boxed={false}>
           <span className={`text-[length:var(--cell-fs)] ${expired ? "text-red-400" : "text-foreground"}`}>
             {company?.validUntil ? formatDate(company.validUntil) : "—"}
           </span>
