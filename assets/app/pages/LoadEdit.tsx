@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { ArrowLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ArrowLeft, ChevronRight, RefreshCw, Send } from "lucide-react";
 import { Btn } from "../lib/ui";
 import { captionCls } from "../lib/cells";
 import {
@@ -28,6 +28,7 @@ import RateCostSection, {
 import NotesSection, {
   emptyNotesForm, notesFormToPayload, type NotesFormState,
 } from "../components/loads/NotesSection";
+import SendToDriverModal from "../components/loads/SendToDriverModal";
 import StatusTimeline from "../components/loads/StatusTimeline";
 import AdditionalInfoSection from "../components/loads/AdditionalInfoSection";
 import type { LoadMapPin } from "../components/loads/LoadMap";
@@ -65,6 +66,8 @@ export default function LoadEdit() {
   const [load,    setLoad]    = useState<LoadItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendToast, setSendToast] = useState<string | null>(null);
 
   /**
    * Pins the user is producing right now by typing an address, before any
@@ -208,6 +211,10 @@ export default function LoadEdit() {
           <Btn variant="outline" onClick={refresh}>
             <RefreshCw size={11} className="inline mr-1.5" /> Refresh
           </Btn>
+          {/* Nothing to send to until the load has a driver. */}
+          <Btn variant="primary" onClick={() => setSendOpen(true)} disabled={!load.driver}>
+            <Send size={11} className="inline mr-1.5" /> Send to Driver
+          </Btn>
         </div>
       </div>
 
@@ -318,6 +325,28 @@ export default function LoadEdit() {
           updatedAt:   load.updated_at,
         }}
       />
+
+      <SendToDriverModal
+        open={sendOpen}
+        load={load}
+        onClose={() => setSendOpen(false)}
+        onSent={result => {
+          // The dialog reports each channel itself; this is the one line the
+          // page needs once the dialog is dismissed.
+          const landed = [
+            result.sent.email.ok ? "email" : null,
+            result.sent.sms.ok ? "text" : null,
+          ].filter(Boolean).join(" and ");
+          setSendToast(`Load sent to the driver by ${landed}.`);
+          setTimeout(() => setSendToast(null), 4000);
+        }}
+      />
+
+      {sendToast && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-xs text-emerald-400 shadow-lg">
+          {sendToast}
+        </div>
+      )}
     </div>
   );
 }

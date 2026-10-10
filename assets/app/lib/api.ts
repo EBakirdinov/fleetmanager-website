@@ -128,7 +128,7 @@ export function apiProxy<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * POST a file as multipart/form-data under field `file`.
+ * POST a prepared FormData through the proxy.
  *
  * Kept separate from apiJson because the body must stay a FormData — setting
  * Content-Type ourselves would strip the boundary the browser generates.
@@ -136,10 +136,7 @@ export function apiProxy<T>(path: string, init?: RequestInit): Promise<T> {
  * `{outcome, data}`, but the image ones answer with a bare array, so the
  * caller decides how to read it.
  */
-async function apiUpload(path: string, file: File): Promise<unknown> {
-  const fd = new FormData();
-  fd.append("file", file);
-
+async function apiUploadForm<T = unknown>(path: string, fd: FormData): Promise<T> {
   const res = await fetch(`/api/proxy/${path.replace(/^\/+/, "")}`, {
     method: "POST",
     credentials: "include",
@@ -153,7 +150,15 @@ async function apiUpload(path: string, file: File): Promise<unknown> {
     throw new ApiError(res.status, errorMessage(body, res.status), body);
   }
 
-  return body;
+  return body as T;
+}
+
+/** POST a single file as multipart/form-data under field `file`. */
+async function apiUpload(path: string, file: File): Promise<unknown> {
+  const fd = new FormData();
+  fd.append("file", file);
+
+  return apiUploadForm(path, fd);
 }
 
 export async function apiUpdateProfile(data: {
@@ -528,7 +533,50 @@ export interface LoadItem {
   delivery_date?:    string | null;
   /** Doctrine decimal comes across as a numeric string ("1250.00"). */
   rate?:             string | null;
-  driver?: { id: number; first_name?: string | null; last_name?: string | null; phone?: string | null } | null;
+
+  /**
+   * The assigned driver. `email` and `assigned_truck` were always in the
+   * payload — Driver.yml exposes both — but went undeclared here until the
+   * send-to-driver dialog needed somewhere to read the driver's contact
+   * details and equipment from. The serializer omits null fields rather than
+   * sending them as null, hence every member being optional.
+   */
+  driver?: {
+    id: number;
+    first_name?: string | null;
+    last_name?:  string | null;
+    phone?:      string | null;
+    email?:      string | null;
+    assigned_truck?: {
+      id: number;
+      truck_number?: string | null;
+      assigned_trailer?: { id: number; trailer_number?: string | null; type?: string | null } | null;
+    } | null;
+  } | null;
+
+  /**
+   * The server's cached route figures, refreshed when stops change. The load
+   * page re-routes live for its map, but anything that only needs the numbers
+   * — the send preview, for one — reads them from here rather than paying for
+   * a provider call. `miles_source` says whether they were measured
+   * ("routed") or estimated from straight-line distance ("estimated").
+   */
+  total_miles?:  number | null;
+  loaded_miles?: number | null;
+  empty_miles?:  number | null;
+  miles_source?: "routed" | "estimated" | null;
+
+  /**
+   * Truck and trailer, flattened by the server. A load carries no equipment
+   * of its own — it is reached through the driver's truck — and that relation
+   * loops back on itself, so the serializer's depth limit cuts the trailer off
+   * before `driver.assigned_truck` can carry it. Read equipment from here.
+   */
+  equipment?: {
+    truck_number?:   string | null;
+    trailer_number?: string | null;
+    trailer_type?:   string | null;
+  } | null;
 
   // Section 4 — Equipment Requirements
   load_type?:         string | null;
@@ -658,6 +706,72 @@ export async function apiListLoads(): Promise<LoadItem[]> {
 
 export async function apiDeleteLoad(id: number): Promise<void> {
   await apiProxy<unknown>(`load/${id}`, { method: "DELETE" });
+}
+
+// ─── Sending a load to its driver ────────────────────────────────────────────
+
+/** How one channel went. Both are always present in a 200. */
+export interface SendChannelResult {
+  ok: boolean;
+  message: string;
+}
+
+export interface SendLoadResult {
+  sent: { email: SendChannelResult; sms: SendChannelResult };
+  sentAt: string;
+}
+
+export interface SendLoadPayload {
+  /** Defaults to the load's assigned driver when omitted. */
+  driverId?: number | null;
+  notes?: string;
+  sendEmail: boolean;
+  sendSms: boolean;
+  /** Whether to attach the generated load confirmation. */
+  includeConfirmation: boolean;
+  /** Extra addresses to copy; sent as one comma-separated field. */
+  cc?: string[];
+  /** Documents to attach alongside the confirmation. */
+  files?: File[];
+}
+
+/**
+ * Send a load to its driver by email and/or SMS.
+ *
+ * A 200 does **not** mean both channels worked — the two are independent, and
+ * email landing while SMS did not is a normal outcome the dialog has to show.
+ * Read `sent.email.ok` and `sent.sms.ok` separately. Only a request that could
+ * not be attempted at all (no driver, nothing selected) throws.
+ *
+ * Multipart rather than JSON because of the attachments; the Symfony proxy
+ * rebuilds the multipart body and forwards it upstream with the JWT attached.
+ */
+export async function apiSendLoadToDriver(
+  id: number | string,
+  payload: SendLoadPayload,
+): Promise<SendLoadResult> {
+  const fd = new FormData();
+  if (payload.driverId != null) fd.append("driverId", String(payload.driverId));
+  if (payload.notes) fd.append("notes", payload.notes);
+  fd.append("sendEmail", payload.sendEmail ? "1" : "0");
+  fd.append("sendSms", payload.sendSms ? "1" : "0");
+  fd.append("includeConfirmation", payload.includeConfirmation ? "1" : "0");
+  if (payload.cc?.length) fd.append("cc", payload.cc.join(","));
+  // Field name is not read by the server — it walks everything in $request->files
+  // — but keeping them distinct avoids any proxy collapsing same-named parts.
+  payload.files?.forEach((file, i) => fd.append(`document${i}`, file, file.name));
+
+  return apiUploadForm<SendLoadResult>(`load/${id}/send`, fd);
+}
+
+/**
+ * URL of the generated load confirmation, for the preview pane.
+ *
+ * Same-origin through the proxy, so the browser sends the session cookie and
+ * can render it in an <object> without us fetching the bytes ourselves.
+ */
+export function loadConfirmationUrl(id: number | string): string {
+  return `/api/proxy/load/${id}/confirmation.pdf`;
 }
 
 // ─── Geocoding / Routing / Weather ───────────────────────────────────────────
@@ -1135,7 +1249,7 @@ export async function apiGetIntegrationConfig<T = Record<string, string>>(slug: 
 // ─── ELD imports ─────────────────────────────────────────────────────────────
 
 /**
- * Info about the local record a Quantum candidate matches:
+ * Info about the local record an ELD candidate matches:
  *   - "imported" — already linked to this ELD (nothing to do).
  *   - "vin"      — a local Truck exists with the same VIN (offer to link).
  *   - "license"  — same for Driver by license number.
@@ -1144,6 +1258,14 @@ export interface EldImportMatch {
   type:       "imported" | "vin" | "license";
   localId:    number;
   localLabel: string;
+  /**
+   * Which ELD owns the matched record, on "vin"/"license" matches only.
+   * Null means nobody does — a manually-created record, free to link. A slug
+   * means another ELD already manages it and the API will refuse the link
+   * (linking would move the record's provenance and strand it on the other
+   * provider), so offer an explanation rather than a button.
+   */
+  ownedBy?:   string | null;
 }
 
 /**
@@ -1183,66 +1305,71 @@ export interface EldImportResult {
   linked:   number;
   skipped:  number;
   /**
-   * Trucks import may auto-import (and auto-assign) drivers Quantum reports
-   * as assigned to each vehicle. Absent / 0 when nothing was auto-imported.
+   * Trucks import may auto-import (and auto-assign) the drivers the ELD
+   * reports as assigned to each vehicle. Absent / 0 when nothing was auto-imported.
    */
   driversAutoImported?: number;
   /**
    * Trucks import also reconciles already-imported trucks: if the driver
-   * Quantum reports on a known truck has changed, the previous ELD-sourced
+   * the ELD reports on a known truck has changed, the previous ELD-sourced
    * driver is unassigned and the new one is attached. Counts trucks touched
    * that way. Absent / 0 for the drivers import endpoint.
    */
   driversReassigned?: number;
   /**
    * Already-imported trucks whose ELD-managed fields (plate, year, make/model,
-   * mileage, truck number) were refreshed to match Quantum's current state.
+   * mileage, truck number) were refreshed to match the ELD's current state.
    * Only meaningful on the trucks import endpoint.
    */
   trucksRefreshed?: number;
   /**
    * Already-imported drivers whose ELD-managed fields (name, license state /
-   * type / expiry, email, phone) were refreshed to match Quantum's state.
+   * type / expiry, email, phone) were refreshed to match the ELD's state.
    * Applies to both endpoints.
    */
   driversRefreshed?: number;
   /**
    * ELD-imported trucks that were present in a prior sync but missing from
-   * the current Quantum roster — soft-deactivated (status → inactive) rather
+   * the current ELD roster — soft-deactivated (status → inactive) rather
    * than deleted so history stays intact. Only meaningful on trucks import.
    */
   trucksInactivated?: number;
   /**
-   * ELD-imported drivers missing from the current Quantum roster — flipped
+   * ELD-imported drivers missing from the current ELD roster — flipped
    * to `terminated`. Only meaningful on drivers import.
    */
   driversTerminated?: number;
   /**
-   * True when Quantum's paginated roster hit our safety cap and we can't
-   * tell whether we saw the whole list. The removal / termination pass is
-   * skipped in that case to avoid falsely marking real records inactive.
+   * True when we can't be sure we saw the provider's whole roster — a
+   * paginated fetch hit our safety cap, or the roster came back empty while
+   * records are still linked. The removal / termination pass is skipped in
+   * that case rather than risk marking a live fleet inactive.
    */
   rosterIncomplete?: boolean;
   errors:   Array<{ externalId: string; reason: string }>;
 }
 
-export async function apiQuantumPreviewTrucks(): Promise<EldImportPreview> {
-  return apiProxy<EldImportPreview>("quantum/import/trucks");
+/** What an ELD import can pull. Matches the catalog's `imports` entries. */
+export type EldImportResource = "trucks" | "drivers";
+
+/**
+ * ELD import is slug-addressed: the provider is a path segment matching its
+ * catalog entry, so connecting a new ELD needs no new function here — pass
+ * the slug from `IntegrationDef.slug`.
+ */
+export async function apiEldImportPreview(
+  slug: string,
+  resource: EldImportResource,
+): Promise<EldImportPreview> {
+  return apiProxy<EldImportPreview>(`eld/${slug}/import/${resource}`);
 }
 
-export async function apiQuantumImportTrucks(actions: EldImportActions): Promise<EldImportResult> {
-  return apiProxy<EldImportResult>("quantum/import/trucks", {
-    method: "POST",
-    body: JSON.stringify(actions),
-  });
-}
-
-export async function apiQuantumPreviewDrivers(): Promise<EldImportPreview> {
-  return apiProxy<EldImportPreview>("quantum/import/drivers");
-}
-
-export async function apiQuantumImportDrivers(actions: EldImportActions): Promise<EldImportResult> {
-  return apiProxy<EldImportResult>("quantum/import/drivers", {
+export async function apiEldImportRun(
+  slug: string,
+  resource: EldImportResource,
+  actions: EldImportActions,
+): Promise<EldImportResult> {
+  return apiProxy<EldImportResult>(`eld/${slug}/import/${resource}`, {
     method: "POST",
     body: JSON.stringify(actions),
   });

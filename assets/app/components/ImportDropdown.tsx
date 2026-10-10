@@ -5,13 +5,13 @@ import { useIntegrationStatus } from "../lib/useIntegrationStatus";
 import { useRefData } from "../lib/data";
 import { ImportModal } from "./ImportModal";
 import {
-  apiQuantumPreviewTrucks, apiQuantumImportTrucks,
-  apiQuantumPreviewDrivers, apiQuantumImportDrivers,
-  type EldImportPreview, type EldImportResult,
+  apiEldImportPreview, apiEldImportRun,
+  type EldImportActions, type EldImportPreview,
+  type EldImportResource, type EldImportResult,
 } from "../lib/api";
 
 type PreviewFn = () => Promise<EldImportPreview>;
-type ImportFn  = (externalIds: string[]) => Promise<EldImportResult>;
+type ImportFn  = (actions: EldImportActions) => Promise<EldImportResult>;
 
 interface ResourceHandlers {
   preview: PreviewFn;
@@ -19,32 +19,18 @@ interface ResourceHandlers {
 }
 
 /**
- * Frontend wiring for ELD import calls — one entry per ELD, keyed by slug,
- * holding the preview + import functions per resource. This map only says
- * *how* to call each ELD; *whether* a given resource can be imported is
- * decided by the API catalog (IntegrationDef.imports).
+ * Import button + menu. An ELD appears in the menu when both hold:
+ *   1. Connected for this company                  (useIntegrationStatus)
+ *   2. Catalog declares it supports this resource  (integration.imports)
  *
- * When adding a new ELD:
- *  1. Ship its `imports: [...]` array in the API catalog (DataManager.php).
- *  2. Add a matching entry here with its api.ts helpers.
- */
-const HANDLERS: Record<string, Partial<Record<"trucks" | "drivers", ResourceHandlers>>> = {
-  quantum_eld: {
-    trucks:  { preview: apiQuantumPreviewTrucks,  import: apiQuantumImportTrucks  },
-    drivers: { preview: apiQuantumPreviewDrivers, import: apiQuantumImportDrivers },
-  },
-};
-
-/**
- * Import button + menu. An ELD appears in the menu only when all three hold:
- *   1. Connected for this company                    (useIntegrationStatus)
- *   2. Catalog declares it supports this resource    (integration.imports)
- *   3. Frontend has API bindings for it              (HANDLERS map)
+ * There is deliberately no per-provider wiring here: the API routes are
+ * slug-addressed, so connecting a new ELD makes it appear with nothing to
+ * change in the frontend. Shipping its catalog entry is the whole job.
  *
  * If no ELD qualifies, the whole button is hidden.
  */
 export function ImportDropdown({ resource, onImported }: {
-  resource: "trucks" | "drivers";
+  resource: EldImportResource;
   onImported?: () => void;
 }) {
   const { isConnected } = useIntegrationStatus();
@@ -53,16 +39,23 @@ export function ImportDropdown({ resource, onImported }: {
   const [selected, setSelected] = useState<{ slug: string; label: string; handlers: ResourceHandlers } | null>(null);
   const rootRef                 = useRef<HTMLDivElement | null>(null);
 
+  // Handlers are built here rather than inline in JSX so each one keeps a
+  // stable identity across renders — ImportModal reloads its preview whenever
+  // `previewFn` changes, and a fresh closure every render would re-fetch in a
+  // loop.
   const sources = useMemo(() => {
     const catalog = refData?.integrations ?? [];
     return catalog
       .filter(def => isConnected(def.slug))
       .filter(def => (def.imports ?? []).includes(resource))
-      .map(def => {
-        const handlers = HANDLERS[def.slug]?.[resource];
-        return handlers ? { slug: def.slug, label: def.name, handlers } : null;
-      })
-      .filter((s): s is { slug: string; label: string; handlers: ResourceHandlers } => s !== null);
+      .map(def => ({
+        slug:  def.slug,
+        label: def.name,
+        handlers: {
+          preview: () => apiEldImportPreview(def.slug, resource),
+          import:  (actions: EldImportActions) => apiEldImportRun(def.slug, resource, actions),
+        } as ResourceHandlers,
+      }));
   }, [refData, isConnected, resource]);
 
   // Click-outside handler while the menu is open.
@@ -109,6 +102,7 @@ export function ImportDropdown({ resource, onImported }: {
         <ImportModal
           open={true}
           onClose={() => setSelected(null)}
+          sourceSlug={selected.slug}
           sourceLabel={selected.label}
           resource={resource}
           previewFn={selected.handlers.preview}

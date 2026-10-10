@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Download, Link2, X } from "lucide-react";
 import { Btn } from "../lib/ui";
 import { ApiError, type EldImportActions, type EldImportCandidate, type EldImportPreview, type EldImportResult } from "../lib/api";
+import { useRefData } from "../lib/data";
 
 /**
  * Generic ELD import modal. Each ELD provides its own preview + import
@@ -13,13 +14,21 @@ import { ApiError, type EldImportActions, type EldImportCandidate, type EldImpor
  *               the two (writes eld_source + external_id onto the local
  *               row). Off by default; user opts in.
  *   - IMPORTED: local record already linked to this ELD. Not selectable.
+ *   - OWNED:    local record matches, but another connected ELD manages it.
+ *               Not selectable — the API refuses the link, because taking it
+ *               would move the record's provenance and strand it on the other
+ *               provider. Shown so the collision is visible rather than silent.
  */
 export function ImportModal({
-  open, onClose, sourceLabel, resource, previewFn, importFn, onImported,
+  open, onClose, sourceSlug, sourceLabel, resource, previewFn, importFn, onImported,
 }: {
   open: boolean;
   onClose: () => void;
-  /** Human-readable ELD name for the header ("Quantum ELD", "Samsara", …). */
+  /** Catalog slug of the ELD being imported from — used to tell a record this
+   *  same ELD owns (renumbered upstream, safe to re-link) apart from one a
+   *  different ELD owns (not ours to take). */
+  sourceSlug: string;
+  /** Human-readable ELD name for the header ("Quantum ELD", "MAX ELD", …). */
   sourceLabel: string;
   /** What we're importing — used for copy only. */
   resource: "trucks" | "drivers";
@@ -35,6 +44,28 @@ export function ImportModal({
   const [toCreate,  setToCreate]  = useState<Set<string>>(new Set());
   const [toLink,    setToLink]    = useState<Set<string>>(new Set());
   const [result,    setResult]    = useState<EldImportResult | null>(null);
+  const { data: refData } = useRefData();
+
+  // Slug → display name, so a blocked row can name the ELD holding it rather
+  // than showing a raw slug.
+  const providerNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const def of refData?.integrations ?? []) map[def.slug] = def.name;
+    return map;
+  }, [refData]);
+
+  /**
+   * The ELD blocking a link, or null when the row is linkable. A match owned
+   * by *this* ELD under a different external id is still linkable — that's an
+   * upstream renumbering, and re-pointing it is the correct repair.
+   */
+  const blockedBy = useMemo(() => {
+    return (c: EldImportCandidate): string | null => {
+      const owner = c.match?.ownedBy;
+      if (!owner || owner === sourceSlug) return null;
+      return providerNames[owner] ?? owner;
+    };
+  }, [providerNames, sourceSlug]);
 
   // Load preview whenever the modal opens.
   useEffect(() => {
@@ -90,7 +121,11 @@ export function ImportModal({
 
   function selectAllLinks() {
     if (!preview) return;
-    setToLink(new Set(preview.candidates.filter(c => c.match && c.match.type !== "imported").map(c => c.externalId)));
+    setToLink(new Set(
+      preview.candidates
+        .filter(c => c.match && c.match.type !== "imported" && blockedBy(c) === null)
+        .map(c => c.externalId)
+    ));
   }
 
   function clearAll() {
@@ -196,6 +231,7 @@ export function ImportModal({
                       key={c.externalId}
                       candidate={c}
                       resource={resource}
+                      blockedBy={blockedBy(c)}
                       createChecked={toCreate.has(c.externalId)}
                       linkChecked={toLink.has(c.externalId)}
                       onToggleCreate={() => toggleCreate(c.externalId)}
@@ -291,10 +327,12 @@ export function ImportModal({
 }
 
 function CandidateRow({
-  candidate, resource, createChecked, linkChecked, onToggleCreate, onToggleLink,
+  candidate, resource, blockedBy, createChecked, linkChecked, onToggleCreate, onToggleLink,
 }: {
   candidate: EldImportCandidate;
   resource: "trucks" | "drivers";
+  /** Display name of another ELD that owns the matched record, else null. */
+  blockedBy: string | null;
   createChecked: boolean;
   linkChecked: boolean;
   onToggleCreate: () => void;
@@ -317,6 +355,29 @@ function CandidateRow({
             </span>
           </div>
           {detail && <div className="text-xs font-mono text-muted-foreground truncate">{detail}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // Matched, but another ELD manages the local record. Informational only:
+  // the API refuses this link, so offering the toggle would just produce an
+  // error in the results list.
+  if (match && blockedBy !== null) {
+    return (
+      <div className="flex items-start gap-3 py-2 opacity-50 cursor-not-allowed">
+        <div className="mt-0.5 w-4 h-4 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-foreground truncate">{primary}</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-muted-foreground tracking-wider uppercase">
+              Managed by {blockedBy}
+            </span>
+          </div>
+          <div className="text-xs font-mono text-muted-foreground truncate">
+            Matches {(resource === "trucks") ? "#" : ""}{match.localLabel}
+            {detail ? ` · ${detail}` : ""}
+          </div>
         </div>
       </div>
     );
