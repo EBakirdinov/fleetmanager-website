@@ -1,0 +1,38 @@
+{% extends 'help/layout.html.twig' %}
+{% from 'marketing/_icons.html.twig' import icon %}
+
+{% block head_title %}Help — Fleet Pro{% endblock %}
+
+{% block content %}
+    <h1 class="text-3xl font-semibold leading-[1.15] tracking-tight text-balance sm:text-4xl">Help</h1>
+    <p class="mt-4 max-w-[62ch] text-base leading-relaxed text-pretty text-muted-foreground">
+        How the app works, written for the people using it. If you are new, start with
+        <a href="{{ path('help_article', { slug: 'getting-started' }) }}" class="text-accent underline underline-offset-2">Getting started</a> —
+        it covers the setup order that saves the most re-typing.
+    </p>
+
+    <div class="mt-12 space-y-12">
+        {% for section in tree %}
+            <section>
+                <h2 class="text-xs font-mono uppercase tracking-widest text-muted-foreground">{{ section.title }}</h2>
+                {# Discrete bordered cards rather than the hairline grid used
+                   elsewhere: a section with an odd number of articles would
+                   leave the grid's background showing as a phantom empty card. #}
+                <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                    {% for article in section.articles %}
+                        <a href="{{ path('help_article', { slug: article.slug }) }}"
+                           class="group rounded-md border border-border bg-card p-5 transition-colors hover:border-primary/40 hover:bg-muted">
+                            <div class="flex items-center gap-2.5">
+                                <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
+                                    {{ icon(article.icon, 16) }}
+                                </span>
+                                <h3 class="text-sm font-medium leading-snug">{{ article.title }}</h3>
+                            </div>
+                            <p class="mt-2.5 text-sm leading-relaxed text-muted-foreground">{{ article.summary }}</p>
+                        </a>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endfor %}
+    </div>
+{% endblock %}

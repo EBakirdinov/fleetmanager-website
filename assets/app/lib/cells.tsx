@@ -682,7 +682,7 @@ function SelectControl({ selectRef, value, captionId, onChange, children }: {
   );
 }
 
-export function SelectCell({ label, value, onChange, children, hint, error, required, wide, icon }: {
+export function SelectCell({ label, value, onChange, children, hint, error, required, wide, icon, readLabel }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -692,6 +692,14 @@ export function SelectCell({ label, value, onChange, children, hint, error, requ
   required?: boolean;
   wide?: boolean;
   icon?: ElementType;
+  /**
+   * What to show at rest, when the value is not its own label.
+   *
+   * Almost every select here stores the text it displays — "FTL", "Dry Van" —
+   * so the value reads fine on its own. One that stores an opaque id must
+   * pass the name, or the section at rest shows the id.
+   */
+  readLabel?: string;
 }) {
   const captionId = useId();
   const { ref, openPicker } = useSelectPicker();
@@ -700,7 +708,7 @@ export function SelectCell({ label, value, onChange, children, hint, error, requ
   if (atRest) {
     return (
       <Cell label={label} hint={hint} error={error} required={required} wide={wide} as="div">
-        <ReadValue>{value}</ReadValue>
+        <ReadValue>{readLabel ?? value}</ReadValue>
       </Cell>
     );
   }

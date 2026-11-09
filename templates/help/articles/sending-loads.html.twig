@@ -1,0 +1,56 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        Once a load has a driver, one action sends it to them — by email, by text, or both. The
+        message goes out through <strong>your</strong> SendGrid account and <strong>your</strong>
+        Twilio number, so the driver sees your company's name and a reply comes back to you rather
+        than to us.
+    </p>
+
+    <h2>What the driver gets</h2>
+    <ul>
+        <li>
+            <strong>By email:</strong> the load details and a <strong>rate confirmation PDF</strong>
+            generated at the moment you send. You can add up to five more attachments of up to 8 MB
+            each — a broker's confirmation, a permit, a map — and CC anyone who needs a copy.
+        </li>
+        <li>
+            <strong>By text:</strong> a short version of the same thing, capped at 320 characters.
+            A text is for the driver who is about to roll, not for the paperwork.
+        </li>
+    </ul>
+
+    <h2>The rate confirmation</h2>
+    <p>
+        The PDF is generated on demand and is never stored, so it always reflects the load as it
+        is right now. Only the breakdown lines marked <strong>include in rate confirmation</strong>
+        appear on it — your internal cost estimates stay internal. If you change the rate after
+        sending, send again; the new PDF supersedes the old one.
+    </p>
+
+    <h2>When one channel fails</h2>
+    <p>
+        Email and SMS are sent independently and each reports its own result. If the email lands
+        and the text fails because the number is wrong, you are told exactly that — the success is
+        not hidden by the failure, and the failure is not hidden by the success.
+    </p>
+    <p>This matters for what you do next:</p>
+    <ul>
+        <li><strong>Email failed, SMS sent.</strong> Usually a bad driver email address, or a SendGrid key that has expired. The driver has the short version; fix the address and re-send.</li>
+        <li><strong>SMS failed, email sent.</strong> Usually a mobile number stored in a format Twilio rejects, or a landline. The driver has the full details.</li>
+        <li><strong>Both failed.</strong> Check Settings → Integrations and use the test button on each. That tells you whether it is the credentials or the driver's contact details.</li>
+    </ul>
+
+    <div class="note">
+        <p>You can send with only one channel configured. Email with no Twilio connected works fine;
+        the SMS option simply is not offered.</p>
+    </div>
+
+    <h2>Permission</h2>
+    <p>
+        Sending to a driver is its own permission, separate from editing loads. A user can be able
+        to build a load and not able to dispatch it — useful when you want a second pair of eyes
+        before anything leaves the building.
+    </p>
+{% endblock %}

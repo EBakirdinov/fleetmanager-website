@@ -1,0 +1,99 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        Integrations live under Settings → Integrations. In every case <strong>you supply your own
+        credentials</strong> — they are stored encrypted, used only for your company's requests,
+        and never shared with another company on the platform. That is also why your drivers get
+        email from your domain rather than ours.
+    </p>
+
+    <h2>Test before you rely on it</h2>
+    <p>
+        Every connection has a test button that makes a real call to the provider and reports what
+        came back. It can test credentials you have typed but not yet saved. Use it every time:
+        the alternative is discovering a bad API key when a driver says they never got the load.
+    </p>
+
+    <h2>ELD — Quantum, TrackPro or MAX</h2>
+    <p>An ELD brings three things:</p>
+    <ul>
+        <li><strong>A truck and driver roster</strong> you can import rather than type.</li>
+        <li><strong>Live GPS positions</strong>, which feed the map and the proximity check in <a href="{{ path('help_article', { slug: 'assigning-drivers' }) }}">driver suggestions</a>.</li>
+        <li><strong>Odometer readings</strong>, which keep <a href="{{ path('help_article', { slug: 'maintenance' }) }}">mileage-based service intervals</a> honest.</li>
+    </ul>
+    <p>
+        All three use the same API key field. MAX returns the richest data — it includes plate
+        numbers, model years and driver contact details that the others do not expose.
+    </p>
+
+    <h3>Importing the roster</h3>
+    <p>
+        The import always previews first. It shows you what it will <strong>create</strong> (new
+        records), <strong>link</strong> (provider records matched to ones you already have),
+        <strong>refresh</strong> (existing records it will update) and <strong>retire</strong>
+        (records the provider no longer reports). Nothing changes until you confirm.
+    </p>
+    <p>
+        Read the link and retire lists on your first import. Linking is where a truck you typed in
+        last week gets matched to the same truck from the ELD — and where you will spot it if the
+        same unit exists twice.
+    </p>
+
+    <h3>One ELD at a time</h3>
+    <p>
+        A company can have exactly one ELD connected. Two providers both claiming the same truck
+        is a data problem rather than a feature: you would have two sources of odometer and two
+        sources of position, with no way to say which is right.
+    </p>
+
+    <h3>Switching provider</h3>
+    <p>
+        Because imported records are marked with the provider that created them, switching is a
+        deliberate act. Before disconnecting, the app tells you exactly how much equipment is at
+        stake — "14 trucks and 9 drivers" — and asks whether to release them. Release them and the
+        new provider can adopt those records; keep them and they stay yours, unlinked.
+    </p>
+
+    <div class="warn">
+        <p>Disconnecting without releasing leaves records nobody owns: the old provider is gone and
+        the new one will create duplicates rather than adopt them. If you are changing ELD, release.</p>
+    </div>
+
+    <h2>Fuel card — Mudflap</h2>
+    <p>
+        Connects with an access token, with a sandbox switch for testing. Purchases import
+        automatically, roughly hourly, onto the
+        <a href="{{ path('help_article', { slug: 'expenses' }) }}">expense ledger</a> with gallons,
+        price per gallon and card savings broken out. A fleet can connect more than one fuel card —
+        unlike ELDs, these do not conflict.
+    </p>
+
+    <h2>Google Maps</h2>
+    <p>Three capabilities, each switched on independently, because they are billed separately:</p>
+    <ul>
+        <li><strong>Geocoding</strong> — turns stop addresses into coordinates. Everything else depends on this.</li>
+        <li><strong>Places</strong> — address autocomplete as you type.</li>
+        <li><strong>Routes</strong> — real road distance and drive time.</li>
+    </ul>
+    <p>
+        With Routes off, mileage falls back to a straight-line estimate that runs well under true
+        road miles, and the app labels it as an estimate. See
+        <a href="{{ path('help_article', { slug: 'routing-and-miles' }) }}">Routing, miles and weather</a>.
+    </p>
+
+    <h2>SendGrid and Twilio</h2>
+    <p>
+        SendGrid needs an API key plus the from-address and from-name; Twilio needs the account
+        SID, auth token and your from-number. Between them they are how a load reaches a driver —
+        see <a href="{{ path('help_article', { slug: 'sending-loads' }) }}">Sending loads to drivers</a>.
+        Either works alone.
+    </p>
+
+    <h2>Weather</h2>
+    <p>
+        Open-Meteo needs no account and no key — it is a straight on/off switch, and there is
+        nothing to test. With it on, every stop with coordinates carries a four-day outlook and a
+        reading for its appointment window.
+    </p>
+{% endblock %}

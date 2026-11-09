@@ -1,0 +1,77 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        Freight terms and platform terms, in one place. Where a word means something specific
+        <em>inside Fleet Pro</em> rather than in the industry generally, that is noted.
+    </p>
+
+    <h2>Freight and dispatch</h2>
+    <div class="help-scroll">
+        <table>
+            <thead>
+                <tr><th>Term</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>BOL</strong></td><td>Bill of lading. The document listing what is on the trailer and who it belongs to.</td></tr>
+                <tr><td><strong>Deadhead</strong></td><td>Driving with an empty trailer — typically from where the truck finished to the next pickup. Counted as <strong>empty miles</strong> here, separately from loaded miles.</td></tr>
+                <tr><td><strong>Detention</strong></td><td>Money owed when a shipper or receiver holds the driver beyond the agreed free time. One of the rate line types.</td></tr>
+                <tr><td><strong>Drop and hook</strong></td><td>Leaving one trailer and taking another already loaded, instead of waiting to be loaded.</td></tr>
+                <tr><td><strong>FCFS</strong></td><td>First come, first served. A stop with no fixed appointment — the alternative to an appointment window.</td></tr>
+                <tr><td><strong>Layover</strong></td><td>Compensation when a driver is held overnight between loads.</td></tr>
+                <tr><td><strong>Line haul</strong></td><td>The base rate for moving the freight, before surcharges and accessorials.</td></tr>
+                <tr><td><strong>Lumper</strong></td><td>A third party paid to load or unload the trailer, usually at a grocery warehouse. An expense category.</td></tr>
+                <tr><td><strong>POD</strong></td><td>Proof of delivery — the signed document confirming freight arrived. Required per stop, where you set it.</td></tr>
+                <tr><td><strong>Reefer</strong></td><td>A refrigerated trailer, or a load needing one. Pairs with the temperature field.</td></tr>
+                <tr><td><strong>RPM</strong></td><td>Revenue per mile. The load's rate divided by its miles — which is why routed versus estimated mileage matters.</td></tr>
+                <tr><td><strong>Stop-off</strong></td><td>Extra pay for a stop beyond the first pickup and last delivery.</td></tr>
+                <tr><td><strong>TONU</strong></td><td>Truck ordered not used. A fee when a booked load is cancelled after the truck has been committed.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h2>Equipment and compliance</h2>
+    <div class="help-scroll">
+        <table>
+            <thead>
+                <tr><th>Term</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>CDL</strong></td><td>Commercial driver's licence. Its class, state and expiration are on the driver record.</td></tr>
+                <tr><td><strong>DOT inspection</strong></td><td>The federal annual inspection. Tracked on the truck alongside the state inspection, each with a certificate slot.</td></tr>
+                <tr><td><strong>DVIR</strong></td><td>Driver vehicle inspection report — the pre- and post-trip check. <em>Not currently synced from any ELD.</em></td></tr>
+                <tr><td><strong>ELD</strong></td><td>Electronic logging device. Here it is the source of GPS positions, odometer readings and the truck/driver roster.</td></tr>
+                <tr><td><strong>Endorsement</strong></td><td>An addition to a CDL permitting specific freight — hazmat, tanker, doubles/triples and so on. Six are tracked, each its own flag.</td></tr>
+                <tr><td><strong>E-track</strong></td><td>Track mounted inside a trailer for securing freight. One of the trailer equipment flags, and checked when suggesting drivers.</td></tr>
+                <tr><td><strong>GVWR</strong></td><td>Gross vehicle weight rating — the maximum a vehicle is rated to weigh, loaded.</td></tr>
+                <tr><td><strong>Hazmat</strong></td><td>Hazardous materials. Requires both a driver endorsement and, often, a certified trailer.</td></tr>
+                <tr><td><strong>HOS</strong></td><td>Hours of service — the federal limits on driving time. <em>Not currently synced; ETAs here are drive time, not an HOS projection.</em></td></tr>
+                <tr><td><strong>Medical card</strong></td><td>The DOT medical examiner's certificate. Its expiration sits beside the CDL expiration.</td></tr>
+                <tr><td><strong>PM service</strong></td><td>Preventive maintenance — scheduled work done on an interval rather than in response to a fault.</td></tr>
+                <tr><td><strong>Tare weight</strong></td><td>The empty weight of the trailer. Subtracted from GVWR to give payload capacity.</td></tr>
+                <tr><td><strong>Thermo King</strong></td><td>A common refrigeration unit. A trailer equipment flag, used as shorthand for a working reefer unit.</td></tr>
+                <tr><td><strong>vPIC</strong></td><td>The NHTSA vehicle catalog the app draws makes and models from, so equipment naming stays consistent.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h2>Terms specific to this app</h2>
+    <div class="help-scroll">
+        <table>
+            <thead>
+                <tr><th>Term</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Accessorial</strong></td><td>Any line on a load's rate and cost breakdown other than line haul — detention, tolls, fuel surcharge and the rest.</td></tr>
+                <tr><td><strong>Due soon / overdue</strong></td><td>Maintenance states, worked out live against the truck's current odometer and today's date rather than stored.</td></tr>
+                <tr><td><strong>Estimated miles</strong></td><td>A straight-line distance used when Google Routes is not connected. Runs roughly 15–25% under true road miles and is always labelled.</td></tr>
+                <tr><td><strong>Flagged</strong></td><td>An expense marked as needing attention — the third review state alongside unverified and verified.</td></tr>
+                <tr><td><strong>Level</strong></td><td>One of No access, View, Manage or Full — the shorthand for how much of an area a role can reach.</td></tr>
+                <tr><td><strong>Provenance</strong></td><td>The record of which integration created or owns a record. It is what prevents a second ELD adopting another's trucks.</td></tr>
+                <tr><td><strong>Release</strong></td><td>Giving up an ELD's claim on its imported trucks and drivers, so a new provider can adopt them. Part of switching ELD.</td></tr>
+                <tr><td><strong>Routed miles</strong></td><td>Real road distance from Google Routes. The figure to bill from.</td></tr>
+                <tr><td><strong>Scope</strong></td><td>How far a permission reaches — all records, assigned ones, or the user's own. <em>Defined for the driver portal; not yet enforced.</em></td></tr>
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

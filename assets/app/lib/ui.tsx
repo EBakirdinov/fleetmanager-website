@@ -207,7 +207,15 @@ export function Modal({ open, onClose, title, subtitle, children, footer, width 
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full bg-card border border-border rounded-xl flex flex-col max-h-[90vh]"
+        /*
+          max-h-full, not a vh value: ZoomControls sets `zoom` on <html>, and
+          vh units resolve against the unscaled viewport, so at 120% zoom 90vh
+          measured ~1257px inside a 1164px window and pushed the footer off the
+          bottom of the screen. Percentage height resolves against the fixed
+          inset-0 overlay above, which is the real viewport at any zoom, and
+          that overlay's p-4 supplies the gutter the 90vh was approximating.
+        */
+        className="w-full bg-card border border-border rounded-xl flex flex-col max-h-full"
         style={{ maxWidth: width, boxShadow: "0 16px 48px rgba(0,0,0,0.4)" }}
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 flex-shrink-0">
@@ -229,8 +237,14 @@ export function Modal({ open, onClose, title, subtitle, children, footer, width 
           {children}
         </div>
 
+        {/*
+          bg-card is load-bearing: the body above scrolls underneath this strip,
+          and while it was transparent the rows showed straight through the
+          buttons. Rounding the bottom corners keeps the panel's shape, since
+          the footer is the last thing in it.
+        */}
         {footer && (
-          <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-border flex-shrink-0">
+          <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-border flex-shrink-0 bg-card rounded-b-xl">
             {footer}
           </div>
         )}
@@ -760,6 +774,87 @@ export function ActionsMenu({ items, align = "right" }: {
         </div>,
         document.body
       )}
+    </div>
+  );
+}
+
+/**
+ * A compact select for a list page's filter bar.
+ *
+ * Every other list in this app filters through KpiCard — click "Pending", the
+ * table narrows. That works while a page has one axis worth filtering on.
+ * The ledger has six (date range, category, payment method, vendor, status,
+ * source) and they combine, so the KPI row stays the category filter and the
+ * rest live here.
+ *
+ * Deliberately not the form kit's SelectCell: that one is a labelled field
+ * inside a sheet, sized by the --field-* metrics and meant to be filled in.
+ * This is a toolbar control — one line, its label folded into the value when
+ * nothing is chosen, so a row of them reads as a sentence rather than a form.
+ */
+export function FilterSelect({ label, value, onChange, options, width = 150 }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  /** `value` is what goes to the API; `label` is what the user reads. */
+  options: { value: string; label: string }[];
+  width?: number;
+}) {
+  const active = value !== "";
+
+  return (
+    <label className="flex flex-col gap-1" style={{ width }}>
+      <span className="text-[11px] font-mono text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-full rounded border bg-input-background px-2 py-1.5 text-xs font-mono transition-colors
+          focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15
+          ${active ? "border-primary/50 text-foreground" : "border-border text-muted-foreground"}`}
+      >
+        <option value="">All {label}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/**
+ * A date-range pair. Two native date inputs rather than a calendar popover —
+ * the ledger's ranges are nearly always "a month" or "a quarter", which is
+ * two typed dates, and the native control already handles locale and keyboard.
+ */
+export function DateRangeFilter({ from, to, onChange }: {
+  from: string;
+  to: string;
+  onChange: (from: string, to: string) => void;
+}) {
+  const base =
+    "rounded border bg-input-background px-2 py-1.5 text-xs font-mono transition-colors " +
+    "focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15";
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[11px] font-mono text-muted-foreground">Date Range</span>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="date"
+          value={from}
+          max={to || undefined}
+          onChange={(e) => onChange(e.target.value, to)}
+          className={`${base} ${from ? "border-primary/50 text-foreground" : "border-border text-muted-foreground"}`}
+        />
+        <span className="text-xs font-mono text-muted-foreground">–</span>
+        <input
+          type="date"
+          value={to}
+          min={from || undefined}
+          onChange={(e) => onChange(from, e.target.value)}
+          className={`${base} ${to ? "border-primary/50 text-foreground" : "border-border text-muted-foreground"}`}
+        />
+      </div>
     </div>
   );
 }

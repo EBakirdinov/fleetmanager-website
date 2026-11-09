@@ -1,0 +1,114 @@
+{#
+  One article. Articles extend this and fill {% block body %} with prose
+  wrapped in .help-prose; everything around it — breadcrumb, heading, table of
+  contents, previous/next — comes from here so an article template is content
+  and nothing else.
+#}
+{% extends 'help/layout.html.twig' %}
+{% from 'marketing/_icons.html.twig' import icon %}
+
+{% block head_title %}{{ article.title }} — Fleet Pro help{% endblock %}
+{% block head_description %}{{ article.summary }}{% endblock %}
+{% block canonical %}{{ url('help_article', { slug: article.slug }) }}{% endblock %}
+
+{% block content %}
+    <nav class="flex items-center gap-2 text-xs font-mono text-muted-foreground" aria-label="Breadcrumb">
+        <a href="{{ path('help_index') }}" class="transition-colors hover:text-foreground">Help</a>
+        <span aria-hidden="true">/</span>
+        <span class="text-foreground">{{ article.title }}</span>
+    </nav>
+
+    <h1 class="mt-4 text-3xl font-semibold leading-[1.15] tracking-tight text-balance sm:text-4xl">{{ article.title }}</h1>
+    <p class="mt-4 max-w-[62ch] text-base leading-relaxed text-pretty text-muted-foreground">{{ article.summary }}</p>
+
+    <article class="help-prose mt-10 max-w-[68ch]">
+        {% block body %}{% endblock %}
+    </article>
+
+    <nav class="mt-16 grid gap-px overflow-hidden rounded-md bg-border sm:grid-cols-2" aria-label="More articles">
+        {% if neighbours.prev %}
+            <a href="{{ path('help_article', { slug: neighbours.prev.slug }) }}" class="group bg-card p-5 transition-colors hover:bg-muted">
+                <span class="text-xs font-mono uppercase tracking-widest text-muted-foreground">Previous</span>
+                <span class="mt-1.5 block text-sm font-medium">{{ neighbours.prev.title }}</span>
+            </a>
+        {% else %}
+            <span class="hidden bg-card sm:block"></span>
+        {% endif %}
+
+        {% if neighbours.next %}
+            <a href="{{ path('help_article', { slug: neighbours.next.slug }) }}" class="group bg-card p-5 text-right transition-colors hover:bg-muted">
+                <span class="text-xs font-mono uppercase tracking-widest text-muted-foreground">Next</span>
+                <span class="mt-1.5 block text-sm font-medium">{{ neighbours.next.title }}</span>
+            </a>
+        {% endif %}
+    </nav>
+{% endblock %}
+
+{% block toc %}
+    {# Built from the rendered headings rather than declared per article, so it
+       can never fall out of step with the prose. With JS off the aside stays
+       empty and the article is unaffected. #}
+    <aside class="hidden xl:block xl:w-52 xl:shrink-0">
+        <div class="sticky top-14 py-14">
+            <p class="text-xs font-mono uppercase tracking-widest text-muted-foreground">On this page</p>
+            <nav id="help-toc" class="mt-3 space-y-1 border-l border-border" aria-label="On this page"></nav>
+        </div>
+    </aside>
+
+    <script>
+        (function () {
+            var toc = document.getElementById('help-toc');
+            var article = document.querySelector('.help-prose');
+            if (!toc || !article) return;
+
+            var headings = Array.prototype.slice.call(article.querySelectorAll('h2, h3'));
+            if (!headings.length) {
+                toc.parentElement.parentElement.hidden = true;
+                return;
+            }
+
+            var links = headings.map(function (h, i) {
+                if (!h.id) h.id = 'section-' + i;
+
+                var a = document.createElement('a');
+                a.href = '#' + h.id;
+                a.textContent = h.textContent;
+                a.className = 'block border-l-2 border-transparent py-1 text-xs leading-snug text-muted-foreground transition-colors hover:text-foreground '
+                    + (h.tagName === 'H3' ? 'pl-6' : 'pl-3');
+                toc.appendChild(a);
+                return a;
+            });
+
+            /* Scrollspy. The heading highlighted is the last one whose top has
+               passed under the sticky header, which is what a reader perceives
+               as "the section I am in" — rather than whichever happens to be
+               intersecting, which flickers between two on a short section. */
+            var ticking = false;
+            function sync() {
+                ticking = false;
+                var active = 0;
+                for (var i = 0; i < headings.length; i++) {
+                    if (headings[i].getBoundingClientRect().top <= 96) active = i;
+                }
+
+                /* A short article under a tall window runs out of scroll before
+                   its last headings ever reach that line, which would leave them
+                   permanently un-highlighted. Once you are at the bottom, the
+                   last section is by definition the one you are reading. */
+                if (innerHeight + Math.ceil(scrollY) >= document.documentElement.scrollHeight - 2) {
+                    active = headings.length - 1;
+                }
+                links.forEach(function (a, i) {
+                    a.classList.toggle('border-primary', i === active);
+                    a.classList.toggle('text-foreground', i === active);
+                    a.classList.toggle('border-transparent', i !== active);
+                });
+            }
+
+            addEventListener('scroll', function () {
+                if (!ticking) { ticking = true; requestAnimationFrame(sync); }
+            }, { passive: true });
+            sync();
+        })();
+    </script>
+{% endblock %}

@@ -1,16 +1,23 @@
 import { useState, useEffect } from "react";
 import { RefreshCw, Check, X } from "lucide-react";
 import { useRefData, type IntegrationDef, type IntegrationField } from "../lib/data";
+import { useIntegrationStatus } from "../lib/useIntegrationStatus";
 import { SlideDrawer, DrawerSection, DrawerField, DrawerCell, Btn, Switch } from "../lib/ui";
 import {
   apiGetIntegrationStatus, apiSaveIntegration, apiDeleteIntegration,
-  apiGetIntegrationConfig, apiTestIntegration,
-  ApiError, type IntegrationProbeResult,
+  apiGetIntegrationConfig, apiTestIntegration, apiGetIntegrationLinked,
+  ApiError, type IntegrationProbeResult, type IntegrationLinkedCounts,
 } from "../lib/api";
 import { IntegrationIcon } from "../lib/integrationIcons";
 
 interface IntegrationView extends IntegrationDef {
   connected: boolean;
+  /**
+   * Name of the connected integration that rules this one out, for the
+   * exclusive types where a company gets exactly one provider. Undefined
+   * when nothing is in the way.
+   */
+  blockedBy?: string;
 }
 
 /** Credentials are typed in; everything else is a setting with a state. */
@@ -29,15 +36,28 @@ function labelFor(integration: IntegrationView, key: string): string {
   return integration.fields.find(f => f.key === key)?.label ?? key;
 }
 
+/** "12 trucks and 1 driver" — the repo has no i18n layer to defer the plural to. */
+function describeLinked(counts: IntegrationLinkedCounts): string {
+  const part = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  return `${part(counts.trucks, "truck")} and ${part(counts.drivers, "driver")}`;
+}
+
 function IntegrationCard({ integration, onClick }: {
   integration: IntegrationView;
   onClick: () => void;
 }) {
+  // A blocked card is inert rather than hidden: the provider is still part of
+  // the catalog, and saying why it can't be connected is more use than
+  // leaving the dispatcher to wonder where it went.
+  const blocked = !!integration.blockedBy;
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="bg-card border border-border rounded-xl p-5 text-left hover:border-white/20 transition-colors flex flex-col gap-3"
+      disabled={blocked}
+      className={`bg-card border border-border rounded-xl p-5 text-left transition-colors flex flex-col gap-3 ${blocked ? "opacity-60 cursor-not-allowed" : "hover:border-white/20"}`}
     >
       <div className="flex items-center gap-3">
         <IntegrationIcon slug={integration.slug} name={integration.name} iconUrl={integration.iconUrl} size={40} />
@@ -52,14 +72,20 @@ function IntegrationCard({ integration, onClick }: {
           style={{ backgroundColor: integration.connected ? "#10b981" : "#4b5563" }}
         />
         <span className={`text-xs font-mono ${integration.connected ? "text-emerald-400" : "text-muted-foreground"}`}>
-          {integration.connected ? "Connected" : "Not connected"}
+          {integration.connected ? "Connected" : blocked ? "Unavailable" : "Not connected"}
         </span>
       </div>
-      <div className="flex justify-end pt-1">
+      {blocked && (
+        <p className="text-[11px] font-mono text-muted-foreground/70 leading-relaxed">
+          {integration.blockedBy} is connected. Only one {integration.type.toUpperCase()} at a time —
+          disconnect it to switch.
+        </p>
+      )}
+      <div className="flex justify-end pt-1 mt-auto">
         {integration.connected ? (
           <Btn variant="primary">Manage</Btn>
         ) : (
-          <Btn variant="outline">Connect</Btn>
+          <Btn variant="outline" disabled={blocked}>Connect</Btn>
         )}
       </div>
     </button>
@@ -68,6 +94,13 @@ function IntegrationCard({ integration, onClick }: {
 
 export default function Integrations() {
   const { data: refData, loading: refLoading } = useRefData();
+
+  // This page owns its own copy of the status map (it needs the loading and
+  // error states), but useIntegrationStatus caches the same map at module
+  // scope for everyone else — ImportDropdown included. Refreshing it after a
+  // save or a disconnect is what stops the Trucks page from offering an ELD
+  // that was just disconnected, which then 400s as "not connected".
+  const { refresh: refreshStatusCache } = useIntegrationStatus();
 
   const [status, setStatus]   = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
@@ -83,11 +116,18 @@ export default function Integrations() {
   const [testing, setTesting] = useState(false);
   const [probe,   setProbe]   = useState<Record<string, IntegrationProbeResult> | null>(null);
 
+  // What the open integration owns locally, and whether disconnecting should
+  // hand it back. Null until the counts arrive — the Danger zone waits rather
+  // than claiming zero.
+  const [linked, setLinked] = useState<IntegrationLinkedCounts | null>(null);
+  const [unlink, setUnlink] = useState(true);
+
   async function loadStatus() {
     setLoading(true);
     setError(null);
     try {
       setStatus(await apiGetIntegrationStatus());
+      refreshStatusCache();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to load integrations");
     } finally {
@@ -97,10 +137,23 @@ export default function Integrations() {
 
   useEffect(() => { loadStatus(); }, []);
 
-  const integrations: IntegrationView[] = (refData?.integrations ?? []).map(def => ({
-    ...def,
-    connected: !!status[def.slug],
-  }));
+  // For an exclusive type the connected provider rules out the others, so
+  // find it once per type rather than scanning the catalog per card.
+  const connectedExclusiveByType: Record<string, string> = {};
+  for (const def of refData?.integrations ?? []) {
+    if (def.exclusive && status[def.slug]) connectedExclusiveByType[def.type] = def.name;
+  }
+
+  const integrations: IntegrationView[] = (refData?.integrations ?? []).map(def => {
+    const connected = !!status[def.slug];
+    const holder    = def.exclusive ? connectedExclusiveByType[def.type] : undefined;
+
+    return {
+      ...def,
+      connected,
+      blockedBy: !connected && holder ? holder : undefined,
+    };
+  });
 
   function showToast(ok: boolean, msg: string) {
     setToast({ ok, msg });
@@ -108,8 +161,12 @@ export default function Integrations() {
   }
 
   async function openDrawer(integration: IntegrationView) {
+    if (integration.blockedBy) return;
+
     setSelected(integration);
     setProbe(null);
+    setLinked(null);
+    setUnlink(true);
 
     // Credentials start blank — they're write-only from here, and a blank
     // means "keep what's stored". Settings have to start at their real
@@ -123,6 +180,14 @@ export default function Integrations() {
     setDrawerOpen(true);
 
     if (!integration.connected) return;
+
+    // Only the exclusive (ELD) integrations own local records; asking for the
+    // rest would be a round trip that always answers zero.
+    if (integration.exclusive) {
+      apiGetIntegrationLinked(integration.slug)
+        .then(counts => setLinked(counts))
+        .catch(() => setLinked({ trucks: 0, drivers: 0 }));
+    }
 
     try {
       const stored = await apiGetIntegrationConfig<Record<string, unknown>>(integration.slug);
@@ -147,6 +212,7 @@ export default function Integrations() {
     setSelected(null);
     setForm({});
     setProbe(null);
+    setLinked(null);
   }
 
   function setField(key: string, value: FieldValue) {
@@ -215,6 +281,9 @@ export default function Integrations() {
       setForm({});
       setProbe(null);
     } catch (e) {
+      // A 409 means something else took the slot between this page loading and
+      // the save — reload so the cards show who actually holds it.
+      if (e instanceof ApiError && e.status === 409) await loadStatus();
       showToast(false, e instanceof ApiError ? e.message : "Save failed. Please try again.");
     } finally {
       setSaving(false);
@@ -223,16 +292,22 @@ export default function Integrations() {
 
   async function handleDisconnect() {
     if (!selected) return;
-    if (!window.confirm(`Disconnect ${selected.name}? This will remove your stored credentials.`)) return;
+
+    const releasing = !!selected.exclusive && unlink && !!linked && linked.trucks + linked.drivers > 0;
+    const consequence = releasing
+      ? `\n\n${describeLinked(linked!)} imported from ${selected.name} will be unlinked so another ELD can take them over. The records themselves are kept.`
+      : "";
+    if (!window.confirm(`Disconnect ${selected.name}? This will remove your stored credentials.${consequence}`)) return;
 
     setDeleting(true);
     try {
-      await apiDeleteIntegration(selected.slug);
+      await apiDeleteIntegration(selected.slug, releasing);
       await loadStatus();
-      showToast(true, "Disconnected");
+      showToast(true, releasing ? `Disconnected. Unlinked ${describeLinked(linked!)}.` : "Disconnected");
       setDrawerOpen(false);
       setSelected(null);
       setForm({});
+      setLinked(null);
     } catch (e) {
       // 404 = already gone; treat as success
       if (e instanceof ApiError && e.status === 404) {
@@ -376,6 +451,27 @@ export default function Integrations() {
 
         {selected?.connected && (
           <DrawerSection title="Danger zone">
+            {selected.exclusive && linked && linked.trucks + linked.drivers > 0 && (
+              <DrawerCell>
+                <div className="flex items-start gap-3">
+                  <Switch
+                    checked={unlink}
+                    onChange={setUnlink}
+                    label="Unlink imported records"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-foreground leading-tight">
+                      Unlink imported records
+                    </p>
+                    <p className="text-[11px] font-mono text-muted-foreground/70 mt-1 leading-relaxed">
+                      {describeLinked(linked)} came from {selected.name}. Leave this on if
+                      you're switching providers — the records are kept either way, but
+                      an ELD can only take over records no other provider still holds.
+                    </p>
+                  </div>
+                </div>
+              </DrawerCell>
+            )}
             <DrawerCell>
               <Btn variant="danger" onClick={handleDisconnect} disabled={saving || deleting}>
                 {deleting ? "Disconnecting…" : "Disconnect"}

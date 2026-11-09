@@ -1,0 +1,34 @@
+{#
+  The article tree. Included twice — once in the desktop sidebar, once inside
+  the mobile disclosure — so the markup lives in one place and the two can
+  never list different articles.
+
+  `id_prefix` keeps the two copies' element ids distinct.
+#}
+{% from 'marketing/_icons.html.twig' import icon %}
+
+<nav class="space-y-6" aria-label="Help articles">
+    {% for section in tree %}
+        <div>
+            <p class="px-2 text-xs font-mono uppercase tracking-widest text-muted-foreground">{{ section.title }}</p>
+            <ul class="mt-2 space-y-px">
+                {% for article in section.articles %}
+                    {% set active = article.slug == current %}
+                    <li>
+                        <a href="{{ path('help_article', { slug: article.slug }) }}"
+                           data-help-nav-item
+                           data-help-title="{{ article.title|lower }} {{ article.summary|lower }}"
+                           {% if active %}aria-current="page"{% endif %}
+                           class="flex items-center gap-2.5 rounded px-2 py-1.5 text-sm transition-colors
+                                  {{ active
+                                     ? 'bg-primary/10 font-medium text-primary'
+                                     : 'text-muted-foreground hover:bg-card hover:text-foreground' }}">
+                            <span class="shrink-0 {{ active ? 'text-primary' : 'text-muted-foreground' }}">{{ icon(article.icon, 14) }}</span>
+                            {{ article.title }}
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endfor %}
+</nav>

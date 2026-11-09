@@ -2,9 +2,10 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router";
 import { Truck, Route, ChevronLeft, ChevronRight } from "lucide-react";
 import { navSections } from "../lib/nav";
-import { hasRole, useAuth } from "../lib/auth";
+import { useAuth } from "../lib/auth";
 import { roleLabel } from "../lib/roles";
 import { displayName, initialsOf } from "../lib/user";
+import { isHidden } from "../lib/permissions";
 
 function getStoredOpen(): boolean {
   try { return localStorage.getItem("sidebar_open") !== "false"; } catch { return true; }
@@ -57,7 +58,7 @@ export default function Sidebar() {
             )}
             <div className="space-y-0.5">
               {section.items.filter(item =>
-                !item.roles || hasRole(user, item.roles)
+                !item.module || !isHidden(user, item.module)
               ).map(({ icon: Icon, label, path, badge }) => (
                 <NavLink
                   key={path}

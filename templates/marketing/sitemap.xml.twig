@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+{#
+  No <lastmod>. A wrong one is worse than none — crawlers treat a lastmod they
+  can disprove as a reason to distrust the whole file — and there is nothing
+  here that knows when the copy last changed.
+#}
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>{{ url('marketing_platform') }}</loc>
+        <changefreq>monthly</changefreq>
+        <priority>1.0</priority>
+    </url>
+    <url>
+        <loc>{{ url('help_index') }}</loc>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    {% for slug in help_articles %}
+        <url>
+            <loc>{{ url('help_article', { slug: slug }) }}</loc>
+            <changefreq>monthly</changefreq>
+            <priority>0.6</priority>
+        </url>
+    {% endfor %}
+</urlset>

@@ -4,8 +4,8 @@ import { ArrowLeft, ChevronRight, RefreshCw, Send } from "lucide-react";
 import { Btn } from "../lib/ui";
 import { captionCls } from "../lib/cells";
 import {
-  apiGetLoad, apiUpdateLoad, apiUpdateLoadStop, apiWeather, ApiError,
-  type LoadItem, type LoadStopItem,
+  apiGetLoad, apiUpdateLoad, apiUpdateLoadStop, apiWeather, apiListBrokers, ApiError,
+  type LoadItem, type LoadStopItem, type BrokerItem,
 } from "../lib/api";
 import { driverLabel } from "../lib/loads";
 
@@ -25,6 +25,9 @@ import { linesFromApi } from "../components/loads/accessorials";
 import RateCostSection, {
   rateCostFormToPayload, type RateCostFormState,
 } from "../components/loads/RateCostSection";
+import BrokerSection, {
+  emptyBrokerForm, brokerFormToPayload, type BrokerFormState,
+} from "../components/loads/BrokerSection";
 import NotesSection, {
   emptyNotesForm, notesFormToPayload, type NotesFormState,
 } from "../components/loads/NotesSection";
@@ -76,6 +79,8 @@ export default function LoadEdit() {
    * the record on refresh — the backend re-geocodes a stop when its address
    * changes, so after a save the two agree.
    */
+  const [brokers, setBrokers] = useState<BrokerItem[]>([]);
+
   const [livePickupPin,   setLivePickupPin]   = useState<LoadMapPin | null>(null);
   const [liveDeliveryPin, setLiveDeliveryPin] = useState<LoadMapPin | null>(null);
 
@@ -98,6 +103,16 @@ export default function LoadEdit() {
   }, [id]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // The directory, for the broker picker. Best-effort: a caller without the
+  // brokers module still gets the load page, just without the picker's list.
+  useEffect(() => {
+    let cancelled = false;
+    void apiListBrokers()
+      .then(list => { if (!cancelled) setBrokers(list); })
+      .catch(() => { /* picker stays empty */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const pickupStop   = load ? firstStop(load, "pickup")  : null;
   const deliveryStop = load ? lastStop(load, "delivery") : null;
@@ -269,15 +284,27 @@ export default function LoadEdit() {
         )}
       </EditableSection>
 
-      {/* §4 */}
+      {/* §4 — who the load is for. Before equipment and rate because the
+          broker's terms, and its do-not-load flag, are what decide whether
+          there is a load to spec at all. */}
+      <EditableSection
+        value={brokerFormOf(load)}
+        onSave={draft => saveLoad(brokerFormToPayload(draft))}
+      >
+        {(draft, patch) => (
+          <BrokerSection value={draft} onChange={patch} brokers={brokers} sectionNumber={4} />
+        )}
+      </EditableSection>
+
+      {/* §5 */}
       <EditableSection
         value={equipmentFormOf(load)}
         onSave={draft => saveLoad(equipmentFormToPayload(draft))}
       >
-        {(draft, patch) => <EquipmentSection value={draft} onChange={patch} sectionNumber={4} />}
+        {(draft, patch) => <EquipmentSection value={draft} onChange={patch} sectionNumber={5} />}
       </EditableSection>
 
-      {/* §5 and §6, half each — the same pairing the Add page makes, for the
+      {/* §6 and §7, half each — the same pairing the Add page makes, for the
           same reason: neither fills a page-wide row on its own. The ledger is
           a narrow column of figures with acres of empty band beside it, and
           the notes are three boxes that only need to be wide enough to write
@@ -293,7 +320,7 @@ export default function LoadEdit() {
         >
           {(draft, patch) => (
             <RateCostSection
-              value={draft} onChange={patch} sectionNumber={5}
+              value={draft} onChange={patch} sectionNumber={6}
               totalMiles={route?.total_miles ?? null}
               milesSource={route?.source ?? null}
             />
@@ -307,14 +334,14 @@ export default function LoadEdit() {
           onSave={draft => saveLoad(notesFormToPayload(draft))}
         >
           {(draft, patch) => (
-            <NotesSection value={draft} onChange={patch} sectionNumber={6} columns={1} />
+            <NotesSection value={draft} onChange={patch} sectionNumber={7} columns={1} />
           )}
         </EditableSection>
       </div>
 
-      {/* §7 */}
+      {/* §8 */}
       <AdditionalInfoSection
-        sectionNumber={7}
+        sectionNumber={8}
         value={{
           origin:      load.origin,
           destination: load.destination,
@@ -453,6 +480,14 @@ function equipmentFormOf(load: LoadItem): EquipmentFormState {
  */
 function rateFormOf(load: LoadItem): RateCostFormState {
   return { lines: linesFromApi(load.accessorial_lines) };
+}
+
+function brokerFormOf(load: LoadItem): BrokerFormState {
+  return {
+    ...emptyBrokerForm(),
+    brokerId:         load.broker?.id ? String(load.broker.id) : "",
+    brokerLoadNumber: load.broker_load_number ?? "",
+  };
 }
 
 function notesFormOf(load: LoadItem): NotesFormState {

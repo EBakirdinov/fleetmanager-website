@@ -1,0 +1,95 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        Permissions here are a <strong>role plus adjustments</strong>. The role does the heavy
+        lifting, and anything it gets wrong for one person you fix on that person — without
+        inventing a new role or giving someone more than they need.
+    </p>
+
+    <h2>Inviting someone</h2>
+    <p>Under Users &amp; Access you can add a person two ways:</p>
+    <ul>
+        <li><strong>Set a password yourself</strong> and pass it on.</li>
+        <li><strong>Have the app email an invitation</strong> with a generated password.</li>
+    </ul>
+    <p>
+        Either way they get a role immediately. An email address can only be used once in your
+        company, so a duplicate invitation is refused rather than creating a second account.
+    </p>
+
+    <h2>The four roles</h2>
+    <div class="help-scroll">
+        <table>
+            <thead>
+                <tr><th>Role</th><th>Intended for</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Administrator</strong></td><td>Complete access, including users, billing and integrations.</td></tr>
+                <tr><td><strong>Operations Manager</strong></td><td>Runs the fleet day to day. Everything operational, but no user administration and no integration keys.</td></tr>
+                <tr><td><strong>Dispatcher</strong></td><td>Books and dispatches loads. Sees drivers and equipment, but not profit and not expense amounts.</td></tr>
+                <tr><td><strong>Driver</strong></td><td>Defined for the driver portal, which has not shipped. Not yet useful for office staff.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h2>Access levels</h2>
+    <p>Within a role, each area of the app sits at one of four levels:</p>
+    <ul>
+        <li><strong>No access</strong> — the page is hidden entirely. Not greyed out, not an error on click: it is not in their navigation.</li>
+        <li><strong>View</strong> — can read.</li>
+        <li><strong>Manage</strong> — can create and edit.</li>
+        <li><strong>Full</strong> — adds the destructive and administrative actions. Permanent deletion is usually what separates Full from Manage.</li>
+    </ul>
+
+    <h2>Adjusting one person</h2>
+    <p>
+        Open a user and you see their role's defaults with every individual permission listed. From
+        there you can <strong>grant</strong> something the role does not include, or
+        <strong>revoke</strong> something it does.
+    </p>
+    <p>Typical cases:</p>
+    <ul>
+        <li>Give one operations manager <code>drivers.view_ssn</code> because they handle onboarding — and nobody else.</li>
+        <li>Revoke delete from a new dispatcher for their first few months.</li>
+        <li>Give a dispatcher profit visibility because they also quote.</li>
+    </ul>
+    <p>
+        Adjustments sit on top of the role. Change someone's role later and the adjustments still
+        apply, so review them when you promote somebody.
+    </p>
+
+    <div class="note">
+        <p>You cannot edit your own permissions, and you cannot disable your own account or the last
+        remaining administrator. Those guards exist so nobody can lock the company out.</p>
+    </div>
+
+    <h2>Hidden fields are absent, not blanked</h2>
+    <p>
+        This is the part worth understanding properly. When someone lacks permission for a
+        <em>field</em> — an SSN, a driver's pay, a load's rate, an expense amount — that field is
+        <strong>left out of the data sent to their browser entirely</strong>. It is not rendered
+        and then hidden with styling, and it is not sent as an empty value.
+    </p>
+    <p>
+        So a dispatcher who opens developer tools still cannot read a rate. There is nothing there
+        to find. The four fields protected this way are:
+    </p>
+    <ul>
+        <li>Driver SSN, and the SSN card image</li>
+        <li>Driver pay details</li>
+        <li>Load rate</li>
+        <li>Expense amounts</li>
+    </ul>
+    <p>
+        The same applies to totals: expense and vendor summaries have the money stripped out for a
+        user who cannot see amounts, rather than being computed and hidden.
+    </p>
+
+    <h2>Change history</h2>
+    <p>
+        Edits to drivers, loads, trucks, trailers, users and the company are recorded field by
+        field, with who made them. It is how you answer "who changed this rate" — and how a
+        column that someone accidentally cleared can be traced back to what it used to hold.
+    </p>
+{% endblock %}

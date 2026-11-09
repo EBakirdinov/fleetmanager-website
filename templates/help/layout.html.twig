@@ -1,0 +1,138 @@
+{#
+  Chrome shared by the help index and every article.
+
+  Standalone rather than {% extends 'base.html.twig' %} for the same reason as
+  the marketing page: that shell hard-codes <div id="root"> and the SPA bundle
+  with no block to override, and its `#root { overflow: hidden }` would stop a
+  long article scrolling.
+#}
+{% from 'marketing/_icons.html.twig' import icon %}
+
+<!doctype html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{% block head_title %}Help — Fleet Pro{% endblock %}</title>
+    <meta name="description" content="{% block head_description %}How to use Fleet Pro: dispatch, drivers, equipment, maintenance, costs and integrations.{% endblock %}">
+    <link rel="canonical" href="{% block canonical %}{{ url('help_index') }}{% endblock %}">
+    <meta name="robots" content="index,follow,max-snippet:-1">
+
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="alternate icon" href="{{ asset('favicon.ico') }}" sizes="32x32">
+    <meta name="theme-color" content="#f0f2f6" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)">
+
+    {% include 'partials/_theme_boot.html.twig' %}
+    {{ vite_entry_link_tags('site') }}
+
+    <style>
+        html { background: #f0f2f6; color-scheme: light; scroll-behavior: smooth; }
+        html.dark { background: #0b0f14; color-scheme: dark; }
+        @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    </style>
+</head>
+<body class="min-h-screen bg-background text-foreground antialiased">
+
+<a href="#help-content" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:ring-2 focus:ring-ring">Skip to content</a>
+
+<header class="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur-sm">
+    <div class="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
+        <div class="flex items-center gap-3">
+            <a href="{{ path('help_index') }}" class="flex items-center gap-2.5" aria-label="Fleet Pro help">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary text-black">
+                    {{ icon('truck', 15) }}
+                </span>
+                <span class="text-sm font-bold uppercase tracking-tight">Fleet Pro</span>
+            </a>
+            <span class="hidden text-sm text-muted-foreground sm:inline" aria-hidden="true">/</span>
+            <a href="{{ path('help_index') }}" class="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline">Help</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <a href="{{ path('marketing_platform') }}" class="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-block">About the platform</a>
+            <a href="/dashboard" class="inline-flex items-center gap-2 rounded border border-border px-3.5 py-1.5 text-sm font-medium transition-colors hover:bg-card">
+                Back to the app
+            </a>
+        </div>
+    </div>
+</header>
+
+<div class="mx-auto w-full max-w-7xl px-5 sm:px-8">
+    <div class="lg:flex lg:gap-10">
+        {# Mobile: the same tree behind a disclosure, so it costs one line of
+           screen rather than a full column. #}
+        <details class="group border-b border-border py-4 lg:hidden">
+            <summary class="flex cursor-pointer list-none items-center justify-between text-sm font-medium">
+                Browse help
+                <span class="text-muted-foreground transition-transform group-open:rotate-180">{{ icon('chevron-down', 18) }}</span>
+            </summary>
+            <div class="mt-4">
+                {% include 'help/_nav.html.twig' %}
+            </div>
+        </details>
+
+        <aside class="hidden lg:block lg:w-60 lg:shrink-0">
+            <div class="sticky top-14 max-h-[calc(100vh-3.5rem)] overflow-y-auto scroll-thin py-8 pr-2">
+                <label for="help-filter" class="sr-only">Filter articles</label>
+                <input id="help-filter" type="search" autocomplete="off" placeholder="Filter articles…"
+                       class="mb-5 w-full rounded border border-border bg-input-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+                <p id="help-filter-empty" hidden class="mb-4 px-2 text-xs font-mono text-muted-foreground">No article matches.</p>
+                {% include 'help/_nav.html.twig' %}
+            </div>
+        </aside>
+
+        <main id="help-content" class="min-w-0 flex-1 py-10 lg:py-14">
+            {% block content %}{% endblock %}
+        </main>
+
+        {% block toc %}{% endblock %}
+    </div>
+</div>
+
+<footer class="border-t border-border py-8">
+    <div class="mx-auto flex w-full max-w-7xl flex-col gap-3 px-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <p class="text-xs font-mono text-muted-foreground">&copy; {{ 'now'|date('Y') }} Fleet Pro</p>
+        <nav class="flex flex-wrap gap-4" aria-label="Footer">
+            <a href="{{ path('help_index') }}" class="text-xs text-muted-foreground transition-colors hover:text-foreground">All help articles</a>
+            <a href="{{ path('marketing_platform') }}" class="text-xs text-muted-foreground transition-colors hover:text-foreground">About the platform</a>
+            <a href="/dashboard" class="text-xs text-muted-foreground transition-colors hover:text-foreground">Back to the app</a>
+        </nav>
+    </div>
+</footer>
+
+<script>
+    /* Sidebar filter. Plain substring match over each link's title and summary,
+       which is enough for a dozen articles and costs no index. */
+    (function () {
+        var input = document.getElementById('help-filter');
+        var empty = document.getElementById('help-filter-empty');
+        if (!input) return;
+
+        input.addEventListener('input', function () {
+            var q = input.value.trim().toLowerCase();
+            var anyVisible = false;
+
+            document.querySelectorAll('aside [data-help-nav-item]').forEach(function (link) {
+                var hit = !q || link.dataset.helpTitle.indexOf(q) !== -1;
+                link.parentElement.hidden = !hit;
+                if (hit) anyVisible = true;
+            });
+
+            // Hide a section heading whose articles have all been filtered out.
+            document.querySelectorAll('aside nav > div').forEach(function (group) {
+                var items = group.querySelectorAll('li');
+                var shown = Array.prototype.filter.call(items, function (li) { return !li.hidden; });
+                group.hidden = shown.length === 0;
+            });
+
+            if (empty) empty.hidden = anyVisible;
+        });
+    })();
+</script>
+
+{{ vite_entry_script_tags('site') }}
+
+</body>
+</html>

@@ -1,0 +1,95 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        Fleet Pro has one rule that shapes the setup order: <strong>records flow downhill from
+        your equipment and people to your loads</strong>. A load needs a driver, a driver needs a
+        truck, and maintenance needs an odometer. Set things up in that order and the app fills
+        in most of the detail for you; do it backwards and you will type the same VIN three times.
+    </p>
+
+    <h2>The short version</h2>
+    <ol>
+        <li>Connect your ELD, if you have one. It imports trucks and drivers for you.</li>
+        <li>Fill in the gaps on those trucks and drivers, or add them by hand if you have no ELD.</li>
+        <li>Add your trailers.</li>
+        <li>Connect email and SMS so you can send loads out.</li>
+        <li>Invite your team and set what each person can see.</li>
+        <li>Build your first load.</li>
+    </ol>
+
+    <h2>Start with the ELD</h2>
+    <p>
+        If you run <a href="{{ path('help_article', { slug: 'integrations' }) }}">Quantum, TrackPro or MAX</a>,
+        connect it before you type anything. The import pulls your trucks and drivers across with
+        their VINs, unit numbers and licence details, and from then on it keeps odometer readings
+        and GPS positions current by itself. That matters beyond convenience:
+        <a href="{{ path('help_article', { slug: 'maintenance' }) }}">maintenance intervals</a> measured
+        in miles are only as good as the mileage feeding them.
+    </p>
+    <p>
+        The import always shows you what it is about to do — what it will create, what it will
+        link to a record you already have, what it will refresh and what it will retire — before
+        it changes anything. Read that screen the first time. It is also how you catch a truck
+        that exists twice under two unit numbers.
+    </p>
+
+    <div class="note">
+        <p><strong>No ELD?</strong> Nothing is locked. Add trucks and drivers by hand and type odometer
+        readings when you record maintenance. You lose the live map and automatic mileage, and
+        everything else works the same.</p>
+    </div>
+
+    <h2>Fill in what the ELD cannot know</h2>
+    <p>
+        An ELD knows a truck's identity, not its paperwork. After the import, go through
+        <a href="{{ path('help_article', { slug: 'trucks-and-trailers' }) }}">each truck</a> and add
+        plate expiration, inspection dates and the service intervals you actually run. Do the same
+        for <a href="{{ path('help_article', { slug: 'drivers' }) }}">drivers</a>: CDL expiration,
+        medical card expiration and endorsements. Those fields are what later tell you a driver
+        cannot take a hazmat load, so an empty one is not neutral — it is a load you will have to
+        re-assign at the last minute.
+    </p>
+
+    <h2>Trailers</h2>
+    <p>
+        Trailers are not imported — no ELD reports them — so they are the one roster you type in
+        full. The fields that earn their keep are type, payload capacity, and the equipment flags
+        (E-track, Thermo King, hazmat certified). Those drive
+        <a href="{{ path('help_article', { slug: 'assigning-drivers' }) }}">driver suggestions</a>,
+        so a blank trailer record means a truck that never gets suggested for the freight it can
+        actually haul.
+    </p>
+
+    <h2>Connect email and SMS</h2>
+    <p>
+        Sending a load to a driver goes out through <strong>your</strong> SendGrid account and
+        <strong>your</strong> Twilio number, not ours, so your driver sees a message from your
+        company and a reply reaches you. Both are set up in Settings → Integrations and both have
+        a test button. Use it — finding out the API key is wrong while you are configuring it is
+        far better than finding out when a driver says they never got the load.
+    </p>
+
+    <h2>Invite your team</h2>
+    <p>
+        Add people under Users &amp; Access. Everyone gets a role, and the role decides what they
+        see — a dispatcher books loads without seeing profit, an operations manager runs the fleet
+        without touching user accounts. You can grant or revoke any individual permission on top
+        of the role, so you rarely need to compromise. See
+        <a href="{{ path('help_article', { slug: 'users-and-permissions' }) }}">Users and permissions</a>.
+    </p>
+
+    <h2>Build your first load</h2>
+    <p>
+        Now the setup pays off. On a new <a href="{{ path('help_article', { slug: 'loads' }) }}">load</a>
+        you enter stops and freight details, pick a driver from a list that already knows who is
+        eligible, and the truck and trailer come along with them. Add the rate, and the app has
+        everything it needs to show you what the run made.
+    </p>
+
+    <div class="warn">
+        <p><strong>One thing to know early:</strong> deleting a record does not erase it. Delete flips a
+        status so history, old loads and the audit trail stay intact. That is deliberate, but it
+        means a mistyped driver should be corrected rather than deleted and re-created.</p>
+    </div>
+{% endblock %}

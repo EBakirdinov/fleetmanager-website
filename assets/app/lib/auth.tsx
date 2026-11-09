@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
 import { apiLogin, apiLogout, apiMe, apiRegister, type User } from "./api";
+import { atLeast, hasPermissions, isHidden, type Level } from "./permissions";
 
 type Status = "loading" | "authenticated" | "unauthenticated";
 
@@ -91,6 +92,55 @@ export function RequireRole({ roles, children }: { roles: string[]; children: Re
   }
 
   if (!hasRole(user, roles)) return <Navigate to="/dashboard" replace />;
+
+  return <>{children}</>;
+}
+
+/**
+ * Gate a route on a permission module, which is what the four access levels
+ * actually describe. Prefer this over RequireRole for anything in the
+ * permission catalog; RequireRole remains for the few genuinely role-shaped
+ * checks (and for ROLE_SUPER_ADMIN).
+ *
+ * `level` defaults to requiring only that the module is not hidden, matching
+ * the sidebar: if you can see the link you can open the page. Pass a level to
+ * demand more — e.g. level="manage" for an editor route.
+ *
+ * Bounces to the dashboard rather than the login page: the user is signed in,
+ * they just cannot be here. The API refuses it independently; this only keeps
+ * people from walking into a page that would fail.
+ */
+export function RequirePermission({
+  module,
+  level,
+  children,
+}: {
+  module: string;
+  level?: Level;
+  children: ReactNode;
+}) {
+  const { user, status } = useAuth();
+
+  if (status === "loading") {
+    return (
+      <div className="flex items-center justify-center h-full w-full text-muted-foreground text-sm font-mono">
+        Loading…
+      </div>
+    );
+  }
+
+  // Wait for the permission payload before deciding, so a slow session does
+  // not bounce someone off a page they are allowed to open.
+  if (!hasPermissions(user)) {
+    return (
+      <div className="flex items-center justify-center h-full w-full text-muted-foreground text-sm font-mono">
+        Loading…
+      </div>
+    );
+  }
+
+  const allowed = level ? atLeast(user, module, level) : !isHidden(user, module);
+  if (!allowed) return <Navigate to="/dashboard" replace />;
 
   return <>{children}</>;
 }

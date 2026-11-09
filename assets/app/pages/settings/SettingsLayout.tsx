@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router";
 import { settingsNav } from "../../lib/nav";
-import { hasRole, useAuth } from "../../lib/auth";
+import { useAuth } from "../../lib/auth";
+import { isHidden } from "../../lib/permissions";
 
 /**
  * The Settings hub.
@@ -16,7 +17,7 @@ import { hasRole, useAuth } from "../../lib/auth";
  */
 export default function SettingsLayout() {
   const { user } = useAuth();
-  const items = settingsNav.filter(item => !item.roles || hasRole(user, item.roles));
+  const items = settingsNav.filter(item => !item.module || !isHidden(user, item.module));
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 max-w-5xl">

@@ -43,6 +43,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: 'assets/main.tsx',
+        site: 'assets/site.tsx',
       },
     },
   },

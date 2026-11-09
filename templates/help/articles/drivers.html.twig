@@ -1,0 +1,86 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        A driver record holds the paperwork that keeps a truck moving through a scale house. The
+        fields are deliberately typed rather than free text — an expiration is a date, an
+        endorsement is a checkbox — because that is what lets the app warn you before something
+        lapses instead of after.
+    </p>
+
+    <h2>Licence and medical</h2>
+    <ul>
+        <li><strong>CDL</strong> — class, number, issuing state, issue date and <strong>expiration</strong>.</li>
+        <li><strong>Medical certificate</strong> — number, issue date and <strong>expiration</strong>.</li>
+    </ul>
+    <p>
+        Keep both expirations filled in even when they are years away. They cost nothing now and
+        they are the only way the app can tell you a driver is about to become un-dispatchable.
+    </p>
+
+    <h2>Endorsements</h2>
+    <p>
+        Six flags, each its own checkbox: doubles/triples, hazardous materials, tanker, passenger,
+        school bus and tank. Hazmat and tanker are the two that do visible work — they are checked
+        directly by <a href="{{ path('help_article', { slug: 'assigning-drivers' }) }}">driver
+        suggestions</a>, and an unticked hazmat box is the single most common reason a perfectly
+        qualified driver is shown as ineligible.
+    </p>
+
+    <div class="warn">
+        <p>An ELD import brings across licence numbers, not endorsements. After your first import,
+        go through the roster and tick them.</p>
+    </div>
+
+    <h2>Employment details</h2>
+    <ul>
+        <li><strong>Driver type</strong> — company driver, owner-operator or lease.</li>
+        <li><strong>Pay type</strong>, <strong>hire date</strong> and <strong>driver number</strong>.</li>
+        <li><strong>Home terminal</strong>, years of experience and the CDL school they came from.</li>
+    </ul>
+
+    <h2>Documents</h2>
+    <p>Six slots, each holding one file with thumbnails generated on upload:</p>
+    <ul>
+        <li>Licence — front and back</li>
+        <li>Medical certificate</li>
+        <li>SSN card</li>
+        <li>Proof of address</li>
+        <li>Other</li>
+    </ul>
+    <p>
+        Replacing a document overwrites the slot, so upload the new medical card when it is
+        renewed rather than putting it in "Other".
+    </p>
+
+    <h2>Status</h2>
+    <p>
+        A driver is <strong>active</strong>, <strong>off duty</strong>, <strong>on leave</strong>,
+        <strong>suspended</strong> or <strong>terminated</strong>. Only active drivers are offered
+        when assigning a load, so status is the quickest way to take someone out of dispatch
+        without touching their record. A dispatcher can usually change availability even when they
+        cannot edit the rest of the driver.
+    </p>
+
+    <h2>Sensitive fields</h2>
+    <p>
+        <strong>SSN and pay are protected separately from the rest of the record.</strong> If a
+        user lacks permission, those fields are not sent to their browser at all — they are absent
+        from the response rather than blanked out on screen, so they cannot be recovered with
+        developer tools. An operations manager does not see them by default; you grant that to a
+        specific person if you need to. See
+        <a href="{{ path('help_article', { slug: 'users-and-permissions' }) }}">Users and permissions</a>.
+    </p>
+
+    <h2>Truck assignment</h2>
+    <p>
+        A driver is paired with a truck, and that pairing is what puts equipment on a load — you
+        assign a driver and their rig follows. The pairing is edited from the
+        <a href="{{ path('help_article', { slug: 'trucks-and-trailers' }) }}">truck</a>.
+    </p>
+
+    <div class="note">
+        <p>Deleting a driver does not erase them — it flips a status so their loads and history stay
+        intact. To correct a mistyped record, edit it rather than deleting and re-creating.</p>
+    </div>
+{% endblock %}

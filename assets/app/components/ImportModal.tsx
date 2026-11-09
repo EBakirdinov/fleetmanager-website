@@ -172,7 +172,10 @@ export function ImportModal({
           role="dialog"
           aria-modal="true"
           onClick={e => e.stopPropagation()}
-          className={`w-full max-w-2xl max-h-[85vh] bg-card border border-border rounded-lg shadow-2xl flex flex-col transition-transform duration-150 ${open ? "scale-100" : "scale-95"}`}
+          // max-h-full rather than a vh value: ZoomControls sets `zoom` on
+          // <html>, and vh resolves against the unscaled viewport, so a
+          // zoomed-in user had the footer pushed off the screen. See Modal.
+          className={`w-full max-w-2xl max-h-full bg-card border border-border rounded-lg shadow-2xl flex flex-col transition-transform duration-150 ${open ? "scale-100" : "scale-95"}`}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">

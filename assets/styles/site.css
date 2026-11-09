@@ -1,0 +1,147 @@
+/**
+ * Tailwind root for the server-rendered Twig pages — the public product page
+ * and the help articles.
+ *
+ * Deliberately NOT ./index.css. The SPA's root scans `assets/**` for class
+ * candidates; this one scans the Twig templates instead. Keeping the two
+ * @source globs apart is what stops these pages' utilities from being appended
+ * to main-*.css, which every signed-in user downloads on every page.
+ *
+ * One entry covers both page families on purpose: they share a design, so they
+ * share nearly every utility, and a reader who arrives from /platform at /help
+ * gets the stylesheet straight from cache.
+ *
+ * fonts.css and theme.css are re-imported rather than copied so the typefaces
+ * and the design tokens stay single-sourced — a colour change in theme.css
+ * reaches these pages with no second edit.
+ *
+ * tw-animate-css is omitted on purpose: these pages use no animate-* classes.
+ */
+@import './fonts.css';
+
+@import 'tailwindcss' source(none);
+@source '../../templates/marketing/**/*.html.twig';
+@source '../../templates/help/**/*.html.twig';
+
+@import './theme.css';
+
+/**
+ * Article prose.
+ *
+ * Hand-written rather than utility classes on every tag: an article is mostly
+ * flowing text, and `<p class="mt-4 text-sm leading-relaxed text-muted-foreground">`
+ * on forty paragraphs is noise that makes the content hard to edit. Everything
+ * here reads from the same tokens as the rest of the app, so it follows the
+ * theme without a dark-mode rule of its own.
+ *
+ * Emitted unconditionally — @source only governs which *utilities* get
+ * generated, not hand-written component CSS.
+ */
+@layer components {
+    .help-prose {
+        font-size: 0.95rem;
+        line-height: 1.75;
+        color: var(--muted-foreground);
+    }
+
+    .help-prose > * + * { margin-top: 1.15em; }
+
+    /* scroll-margin keeps a heading clear of the sticky header when the TOC
+       jumps to it. */
+    .help-prose h2 {
+        margin-top: 2.6em;
+        font-size: 1.35rem;
+        font-weight: 600;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
+        color: var(--foreground);
+        scroll-margin-top: 5rem;
+    }
+
+    .help-prose h3 {
+        margin-top: 2em;
+        font-size: 1.05rem;
+        font-weight: 600;
+        line-height: 1.4;
+        color: var(--foreground);
+        scroll-margin-top: 5rem;
+    }
+
+    .help-prose strong { color: var(--foreground); font-weight: 600; }
+
+    .help-prose a {
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+    .help-prose ul, .help-prose ol { padding-left: 1.3rem; }
+    .help-prose ul { list-style: disc; }
+    .help-prose ol { list-style: decimal; }
+    .help-prose li + li { margin-top: 0.4em; }
+    .help-prose li::marker { color: var(--primary); }
+    .help-prose li > ul, .help-prose li > ol { margin-top: 0.4em; }
+
+    .help-prose code {
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+        background: var(--muted);
+        color: var(--foreground);
+        padding: 0.15em 0.4em;
+        border-radius: calc(var(--radius) - 2px);
+    }
+
+    /* Wrap any table in .help-scroll so a wide one scrolls itself rather than
+       the page. */
+    .help-scroll { overflow-x: auto; }
+
+    .help-prose table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+
+    .help-prose th {
+        text-align: left;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted-foreground);
+        padding: 0.6rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+    }
+
+    .help-prose td {
+        padding: 0.6rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+    }
+
+    /* Callout. `.note` is the neutral aside; `.warn` is for the things that
+       lose data or money if ignored. */
+    .help-prose .note,
+    .help-prose .warn {
+        border: 1px solid var(--border);
+        border-left-width: 3px;
+        border-radius: var(--radius);
+        background: var(--card);
+        padding: 0.9rem 1.1rem;
+        font-size: 0.9rem;
+    }
+
+    .help-prose .note { border-left-color: var(--accent); }
+    .help-prose .warn { border-left-color: var(--primary); }
+    .help-prose .note > * + *,
+    .help-prose .warn > * + * { margin-top: 0.5em; }
+
+    .help-prose figure { margin-top: 1.5em; }
+    .help-prose figcaption {
+        margin-top: 0.5em;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+}

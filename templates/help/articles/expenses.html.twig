@@ -1,0 +1,108 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        The expense ledger is one list of every dollar the fleet spends, whether somebody typed it
+        in, a <a href="{{ path('help_article', { slug: 'maintenance' }) }}">maintenance record</a>
+        created it, or it arrived from a fuel card overnight. One list is the whole idea: fuel in
+        one place and repairs in another is how a cost-per-mile figure ends up wrong.
+    </p>
+
+    <h2>What a line holds</h2>
+    <ul>
+        <li><strong>Category</strong> — fuel, maintenance, tolls, permits and fees, insurance, lodging, meals, scale, lumper, parking, other.</li>
+        <li><strong>Payment method</strong> — fuel card, credit card, debit card, transponder, cash, check, ACH, invoice, other.</li>
+        <li><strong>Amount</strong>, with tax and discount held separately.</li>
+        <li><strong>Vendor</strong> and the city/state where it happened.</li>
+        <li><strong>Attribution</strong> — the truck, trailer, driver and load it belongs to.</li>
+        <li><strong>Odometer</strong> at the time, card last four, and a note.</li>
+    </ul>
+
+    <h2>Receipts</h2>
+    <p>
+        Attach a receipt as JPG, PNG, PDF, WebP or HEIC, up to 10 MB. Receipts are stored
+        <strong>exactly as uploaded</strong> — never re-compressed — because a receipt is evidence,
+        and re-encoding evidence loses the faint line of print somebody needs to read eighteen
+        months later during an audit.
+    </p>
+
+    <h2>The review workflow</h2>
+    <p>Every line is in one of three states:</p>
+    <ul>
+        <li><strong>Unverified</strong> — the default. Nobody has checked it.</li>
+        <li><strong>Verified</strong> — someone has confirmed it against a receipt or statement.</li>
+        <li><strong>Flagged</strong> — something is wrong and it needs attention.</li>
+    </ul>
+    <p>
+        There is also a <strong>billable</strong> flag for costs you intend to pass on. Flagged is
+        the useful one in practice: it gives the person reconciling the card a place to put "this
+        purchase was not ours" without deleting anything.
+    </p>
+
+    <h2>Imported fuel purchases</h2>
+    <p>
+        With a fuel card <a href="{{ path('help_article', { slug: 'integrations' }) }}">connected</a>,
+        purchases arrive by themselves, with the fuel detail broken out: gallons, grade, price per
+        gallon, the retail price and what the card discount saved you.
+    </p>
+
+    <h3>Why imported lines change by themselves</h3>
+    <p>
+        Fuel cards re-price transactions after the fact — a purchase posts as pending, then
+        settles at a slightly different amount. So the import re-reads a trailing window on every
+        run rather than only fetching what is new, and updates rows in place.
+    </p>
+
+    <h3>Who owns which fields</h3>
+    <p>This split is worth knowing, because it decides what you can safely edit:</p>
+    <div class="help-scroll">
+        <table>
+            <thead>
+                <tr><th>Owned by the provider</th><th>Owned by you</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Amount, tax, discount, dates, vendor, location, payment method, card, fuel detail</td>
+                    <td>Truck, driver and load attribution, notes, receipt, verified state, billable flag</td>
+                </tr>
+                <tr>
+                    <td>Refreshed on every sync — edits here are overwritten</td>
+                    <td>Never overwritten. A blank may be filled in once by the import, never changed afterwards</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <p>
+        In short: the provider owns the money and the merchant, you own the judgement. Assign a
+        fuel purchase to the right truck and that assignment survives every future sync.
+    </p>
+
+    <div class="warn">
+        <p><strong>Voided purchases are not removed.</strong> If a transaction is voided at the card
+        provider, it stays on the ledger — absence from a provider's feed is not reliable evidence
+        that something was cancelled, and silently deleting cost lines would be worse than leaving
+        them. Flag it and note why.</p>
+    </div>
+
+    <h2>Finding things</h2>
+    <p>Filtering is done on the server, so it works across the whole ledger and not just the page you are looking at:</p>
+    <ul>
+        <li>Date range, and one or more categories, payment methods, review statuses or sources.</li>
+        <li>Manual only, imported only, or billable only.</li>
+        <li>Vendor, and an odometer range.</li>
+        <li><strong>Free-text search</strong> across description, vendor, subcategory, card last four and notes.</li>
+    </ul>
+
+    <h2>Totals</h2>
+    <p>
+        Summary figures are calculated over everything your filter matches, not just the visible
+        rows — a total, a count and a breakdown by category, plus spend grouped by vendor. Set the
+        filter first, then read the totals.
+    </p>
+
+    <div class="note">
+        <p>Amounts are a separate permission. A dispatcher typically sees which truck fuelled where
+        but not what it cost — and in that case the figures are absent from the response, not
+        merely hidden on screen.</p>
+    </div>
+{% endblock %}

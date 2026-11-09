@@ -61,7 +61,7 @@ export default function NotesSection({
         />
         <TextareaCell
           label="Broker Notes"
-          hint="About the broker or customer — visible to office staff."
+          hint="This load's dealings with the broker — the broker record itself lives on the Brokers page."
           placeholder="Billing quirks, contact preferences…"
           rows={3}
           value={value.brokerNotes}

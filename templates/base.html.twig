@@ -6,15 +6,7 @@
         <title>{% block title %}Fleet Manager{% endblock %}</title>
         <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
 
-        <script>
-            (function () {
-                try {
-                    var t = localStorage.getItem('theme');
-                    var isDark = t === 'dark' || ((!t || t === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-                    if (isDark) document.documentElement.classList.add('dark');
-                } catch (e) {}
-            })();
-        </script>
+        {% include 'partials/_theme_boot.html.twig' %}
         {{ vite_entry_link_tags('main') }}
         {% block head %}{% endblock %}
         <style>html, body { height: 100%; width: 100%; margin: 0; } #root { height: 100%; width: 100%; overflow: hidden; }</style>

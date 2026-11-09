@@ -4,8 +4,8 @@ import { AlertCircle, ArrowLeft, ChevronRight, Loader2, Plus } from "lucide-reac
 import { Btn } from "../lib/ui";
 import { captionCls } from "../lib/cells";
 import {
-  apiCreateLoad, apiAssignmentSuggestions, ApiError,
-  type AssignmentSuggestionResponse,
+  apiCreateLoad, apiAssignmentSuggestions, apiListBrokers, ApiError,
+  type AssignmentSuggestionResponse, type BrokerItem,
 } from "../lib/api";
 import BasicInfoSection, { type StopWeather } from "../components/loads/BasicInfoSection";
 import PickupDetailsSection from "../components/loads/PickupDetailsSection";
@@ -19,6 +19,9 @@ import RateCostSection, {
 import NotesSection, {
   emptyNotesForm, notesFormToPayload, type NotesFormState,
 } from "../components/loads/NotesSection";
+import BrokerSection, {
+  emptyBrokerForm, brokerFormToPayload, type BrokerFormState,
+} from "../components/loads/BrokerSection";
 import AssignmentSection from "../components/loads/AssignmentSection";
 import type { LoadMapPin, LoadMapStop } from "../components/loads/LoadMap";
 import { useStopsWeather } from "../components/loads/weatherPreview";
@@ -72,6 +75,8 @@ export default function LoadAdd() {
   const [equipmentForm, setEquipmentForm] = useState<EquipmentFormState>(emptyEquipmentForm());
   const [rateCostForm,  setRateCostForm]  = useState<RateCostFormState>(emptyRateCostForm());
   const [notesForm,     setNotesForm]     = useState<NotesFormState>(emptyNotesForm());
+  const [brokerForm,    setBrokerForm]    = useState<BrokerFormState>(emptyBrokerForm());
+  const [brokers,       setBrokers]       = useState<BrokerItem[]>([]);
 
   // Assignment — backend-driven suggestions.
   const [selectedDriverId, setSelectedDriverId] = useState<string>("");
@@ -218,6 +223,7 @@ export default function LoadAdd() {
         ...equipmentFormToPayload(equipmentForm),
         ...rateCostFormToPayload(rateCostForm),
         ...notesFormToPayload(notesForm),
+        ...brokerFormToPayload(brokerForm),
         stops: stopsToPayload(stops, pins),
         ...(selectedDriverId ? { driver: Number(selectedDriverId) } : {}),
       });
@@ -227,6 +233,16 @@ export default function LoadAdd() {
       setSaving(false);
     }
   }
+
+  // The directory, fetched once. Failure is not fatal: a dispatcher without
+  // the brokers module still gets a load form, just without the picker.
+  useEffect(() => {
+    let cancelled = false;
+    void apiListBrokers()
+      .then(list => { if (!cancelled) setBrokers(list); })
+      .catch(() => { /* picker stays empty */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // §1 is Route Overview and the stops run from §2, so everything below them
   // starts here and shifts as stops are added or dropped.
@@ -336,8 +352,15 @@ export default function LoadAdd() {
         );
       })}
 
-      <AssignmentSection
+      <BrokerSection
         sectionNumber={nextSection}
+        value={brokerForm}
+        onChange={patch => setBrokerForm(prev => ({ ...prev, ...patch }))}
+        brokers={brokers}
+      />
+
+      <AssignmentSection
+        sectionNumber={nextSection + 1}
         suggestions={suggestions.items}
         selected={suggestions.selected}
         hazmatRequired={hazmatRequired}
@@ -348,7 +371,7 @@ export default function LoadAdd() {
       />
 
       <EquipmentSection
-        sectionNumber={nextSection + 1}
+        sectionNumber={nextSection + 2}
         value={equipmentForm}
         onChange={patch => setEquipmentForm(prev => ({ ...prev, ...patch }))}
       />
@@ -357,7 +380,7 @@ export default function LoadAdd() {
           instead of stretching to match the notes beside it. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
         <RateCostSection
-          sectionNumber={nextSection + 2}
+          sectionNumber={nextSection + 3}
           value={rateCostForm}
           onChange={patch => setRateCostForm(prev => ({ ...prev, ...patch }))}
           totalMiles={route?.total_miles ?? null}
@@ -365,7 +388,7 @@ export default function LoadAdd() {
         />
 
         <NotesSection
-          sectionNumber={nextSection + 3}
+          sectionNumber={nextSection + 4}
           value={notesForm}
           onChange={patch => setNotesForm(prev => ({ ...prev, ...patch }))}
           columns={1}

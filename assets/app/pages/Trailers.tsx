@@ -12,10 +12,6 @@ import {
   apiUploadTrailerInspection, apiDeleteTrailerInspection, documentUrl, type InspectionType,
 } from "../lib/api";
 import { validateVIN, validateYear, validatePositiveInt, validateRequired, combineValidators, todayIsoDate, formatDate } from "../lib/validators";
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
-} from "recharts";
 
 // ─── Form state ──────────────────────────────────────────────────────────────
 
@@ -653,12 +649,6 @@ export default function Trailers() {
                  : statusFilter === "active"   ? items.filter(t => t.status === 1)
                  : statusFilter === "inactive" ? items.filter(t => t.status === 0)
                  : items;
-
-  const statusDonut = [
-    { name: "Active",   value: active   },
-    { name: "Inactive", value: inactive },
-  ];
-  const DONUT_COLORS = ["#10b981", "#ef4444"];
 
   return (
     <>

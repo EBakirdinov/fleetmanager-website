@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Users, ShieldCheck, UserX, KeyRound, Pencil, Plus, Ban, Check } from "lucide-react";
+import { Users, ShieldCheck, UserX, KeyRound, Pencil, Plus, Ban, Check, SlidersHorizontal } from "lucide-react";
 import {
   KpiCard, StatusPill, Btn, SlideDrawer, DrawerSection, DrawerFieldRow,
   DrawerField as Field, DrawerSelect as Select, DrawerCell, ActionsMenu,
@@ -9,9 +9,11 @@ import {
   apiResetWorkerPassword, ApiError, type WorkerItem,
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { ROLE_MAP, ASSIGNABLE_ROLES, DEFAULT_ROLE, isLegacyRole, primaryRole } from "../lib/roles";
+import { ROLE_MAP, ASSIGNABLE_ROLES, DEFAULT_ROLE, WORKER_ADMIN_ROLES, isLegacyRole, primaryRole } from "../lib/roles";
 import { validateRequired, validateEmail, validatePhone, combineValidators } from "../lib/validators";
 import { maskPhone } from "../lib/masks";
+import { can } from "../lib/permissions";
+import PermissionEditor from "../components/workers/PermissionEditor";
 
 // ─── Form state ──────────────────────────────────────────────────────────────
 
@@ -95,8 +97,15 @@ const STATUS_LABEL: Record<number, string> = { 1: "Active", 0: "Disabled" };
 export default function Workers() {
   const { user: currentUser } = useAuth();
   const selfId = currentUser?.id != null ? Number(currentUser.id) : null;
-  const isOwner = (currentUser?.roles ?? []).includes("ROLE_OWNER")
+  // Role *rank*, not page access: who may hand out the Administrator role.
+  // Opening this page at all is a permission and is enforced on the route.
+  const canGrantAdministrator = (currentUser?.roles ?? []).includes("ROLE_OWNER")
     || (currentUser?.roles ?? []).includes("ROLE_SUPER_ADMIN");
+
+  // Editing permissions is its own action, so a user granted users.view to see
+  // the team does not thereby get to change what anyone can do.
+  const canManagePermissions = can(currentUser, "users.manage_permissions");
+  const [permissionTarget, setPermissionTarget] = useState<WorkerItem | null>(null);
 
   const [items,      setItems]      = useState<WorkerItem[]>([]);
   const [loading,    setLoading]    = useState(true);
@@ -257,24 +266,27 @@ export default function Workers() {
   const kpiActive   = items.filter(w => w.status === 1).length;
   const kpiDisabled = items.filter(w => w.status === 0).length;
   const kpiAdmins   = items.filter(w =>
-    (w.roles ?? []).some(r => r === "ROLE_OWNER" || r === "ROLE_MANAGER")).length;
+    (w.roles ?? []).some(r => WORKER_ADMIN_ROLES.includes(r))).length;
 
   const filtered = useMemo(() => {
     switch (filter) {
       case "active":   return items.filter(w => w.status === 1);
       case "disabled": return items.filter(w => w.status === 0);
-      case "admins":   return items.filter(w => (w.roles ?? []).some(r => r === "ROLE_OWNER" || r === "ROLE_MANAGER"));
+      case "admins":   return items.filter(w => (w.roles ?? []).some(r => WORKER_ADMIN_ROLES.includes(r)));
       default:         return items;
     }
   }, [items, filter]);
 
-  // An owner can grant any role; a manager can grant everything below owner.
+  // An administrator can grant any role; anyone else can grant everything
+  // below Administrator.
   // A worker still on a retired role (User, Partner) keeps it as a visible option
   // so editing their profile doesn't silently reassign them.
   const roleOptions = useMemo(() => {
-    const base = isOwner ? ASSIGNABLE_ROLES : ASSIGNABLE_ROLES.filter(r => r !== "ROLE_OWNER");
+    const base = canGrantAdministrator
+      ? ASSIGNABLE_ROLES
+      : ASSIGNABLE_ROLES.filter(r => r !== "ROLE_OWNER");
     return isLegacyRole(form.role) ? [form.role, ...base] : base;
-  }, [isOwner, form.role]);
+  }, [canGrantAdministrator, form.role]);
 
   const editingSelf = drawerMode === "edit" && selected != null && selected.id === selfId;
 
@@ -385,6 +397,14 @@ export default function Workers() {
                           <ActionsMenu items={[
                             { label: "Edit", onClick: () => openEdit(w), icon: Pencil },
                             { label: "Reset password", onClick: () => { setResetTarget(w); setResetPassword(""); setResetError(null); }, icon: KeyRound },
+                            // The API refuses to edit your own permissions
+                            // (409), for the same reason it refuses your own
+                            // role — it is how you lock yourself out.
+                            ...(canManagePermissions && !isSelf ? [{
+                              label: "Permissions",
+                              onClick: () => setPermissionTarget(w),
+                              icon: SlidersHorizontal,
+                            }] : []),
                             // The API refuses to disable your own account (409),
                             // so don't offer it.
                             ...(isSelf ? [] : [{
@@ -524,6 +544,16 @@ export default function Workers() {
           </DrawerFieldRow>
         </DrawerSection>
       </SlideDrawer>
+
+      {/* Per-user permission adjustments */}
+      {permissionTarget && (
+        <PermissionEditor
+          memberId={Number(permissionTarget.id)}
+          memberName={workerName(permissionTarget)}
+          open={permissionTarget !== null}
+          onClose={() => setPermissionTarget(null)}
+        />
+      )}
     </>
   );
 }

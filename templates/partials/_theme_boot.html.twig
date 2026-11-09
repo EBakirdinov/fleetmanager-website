@@ -1,0 +1,18 @@
+{#
+  Applies the persisted theme before first paint, so a dark-mode visitor never
+  sees a white flash.
+
+  Extracted from base.html.twig so the SPA shell and the public marketing page
+  cannot drift apart: both read the same localStorage key that next-themes
+  writes (attribute="class", defaultTheme="system", enableSystem). If a third
+  theme value is ever added, it has to be added once, here.
+#}
+<script>
+    (function () {
+        try {
+            var t = localStorage.getItem('theme');
+            var isDark = t === 'dark' || ((!t || t === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            if (isDark) document.documentElement.classList.add('dark');
+        } catch (e) {}
+    })();
+</script>

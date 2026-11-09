@@ -1,0 +1,102 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        A load in Fleet Pro is a <strong>sequence of stops</strong>, not a from-and-to. Even a
+        simple run is one pickup and one delivery, each with its own address, appointment window,
+        contact and reference number. That shape is what lets a three-stop run be recorded
+        properly instead of squeezed into a notes field.
+    </p>
+
+    <h2>Stops</h2>
+    <p>
+        Each stop is a pickup or a delivery, and they run in sequence. A stop carries:
+    </p>
+    <ul>
+        <li><strong>Facility name and address.</strong> The address is geocoded as you type, which is what makes routing and the weather forecast work.</li>
+        <li><strong>Date and time window.</strong> Either an appointment — a firm window the receiver has given you — or first-come-first-served.</li>
+        <li><strong>Contact and phone</strong> for the person at that facility.</li>
+        <li><strong>Reference number</strong> — the PO, BOL or pickup number that facility will ask your driver for.</li>
+        <li><strong>Instructions</strong>, which go to the driver, and a <strong>store/DC</strong> number where the receiver uses one.</li>
+        <li><strong>Proof of delivery required</strong>, per stop, because some receivers want it and some do not.</li>
+    </ul>
+    <p>
+        Changing a stop's address or date updates the load's own origin, destination and dates,
+        and re-runs the route. You do not maintain those separately.
+    </p>
+
+    <div class="note">
+        <p>Stops are created with the load. You can edit any stop afterwards, but adding or removing
+        one is done by editing the load itself rather than from the stop.</p>
+    </div>
+
+    <h2>Freight details</h2>
+    <p>
+        These describe what is on the trailer, and several of them do real work later — they are
+        what <a href="{{ path('help_article', { slug: 'assigning-drivers' }) }}">driver suggestions</a>
+        check against:
+    </p>
+    <ul>
+        <li><strong>Load type</strong> and <strong>trailer type</strong> — a reefer load will not suggest a driver pulling a flatbed.</li>
+        <li><strong>Temperature</strong> for temperature-controlled freight.</li>
+        <li><strong>Weight</strong> and <strong>pallets or pieces</strong> — weight is checked against trailer payload capacity.</li>
+        <li><strong>Commodity</strong>, and the <strong>hazmat</strong> flag, which requires a driver with the endorsement.</li>
+        <li><strong>Seal required</strong> and <strong>straps / load bars</strong> for securement.</li>
+    </ul>
+
+    <h2>Rate and cost</h2>
+    <p>
+        The money on a load is a breakdown, not a single number, and each line has a category that
+        decides which side of the ledger it lands on:
+    </p>
+    <div class="help-scroll">
+        <table>
+            <thead>
+                <tr><th>Category</th><th>Typical lines</th><th>Effect</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Rate addition</td><td>Line haul, stop-off, detention, layover, TONU</td><td>Adds to revenue</td></tr>
+                <tr><td>Surcharge</td><td>Fuel surcharge</td><td>Adds to revenue</td></tr>
+                <tr><td>Other revenue</td><td>Anything else billable</td><td>Adds to revenue</td></tr>
+                <tr><td>Cost</td><td>Tolls, estimated fuel, other costs</td><td>Subtracts</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p>
+        From those lines the load shows <strong>total revenue, total cost and profit</strong>. Each
+        line also has an <strong>include in rate confirmation</strong> switch, so an internal cost
+        estimate stays off the document the driver and broker see.
+    </p>
+
+    <div class="warn">
+        <p>Rate, cost and profit are four separate permissions. A dispatcher typically sees the rate
+        but not the profit — if a number is missing for one of your users, that is why. See
+        <a href="{{ path('help_article', { slug: 'users-and-permissions' }) }}">Users and permissions</a>.</p>
+    </div>
+
+    <h2>Notes, in three places</h2>
+    <p>
+        There are deliberately three note fields, because mixing them is how the wrong thing ends
+        up in front of the wrong person:
+    </p>
+    <ul>
+        <li><strong>Special instructions</strong> — goes to the driver, and onto the confirmation.</li>
+        <li><strong>Broker notes</strong> — what the broker told you.</li>
+        <li><strong>Internal comments</strong> — for your office, and nowhere else.</li>
+    </ul>
+
+    <h2>Statuses</h2>
+    <p>
+        A load moves through <strong>pending → assigned → in transit → delivered</strong>, with
+        <strong>cancelled</strong> as the exit. Assigning a driver is what moves it off pending.
+    </p>
+
+    <h2>Equipment follows the driver</h2>
+    <p>
+        You assign a <strong>driver</strong> to a load, not a truck. The truck and trailer are
+        whatever that driver is currently assigned, so the equipment on a load is always the
+        equipment that actually went. If you need a different truck on a run, change the driver's
+        assignment on the <a href="{{ path('help_article', { slug: 'trucks-and-trailers' }) }}">truck record</a>
+        rather than looking for a truck field on the load.
+    </p>
+{% endblock %}

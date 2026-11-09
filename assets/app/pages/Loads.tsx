@@ -8,7 +8,85 @@ import {
   apiListLoads, apiDeleteLoad, ApiError, type LoadItem,
 } from "../lib/api";
 import { formatDate } from "../lib/validators";
-import { LOAD_STATUS_LABEL, LOAD_STATUS_COLOR, driverLabel } from "../lib/loads";
+import { LOAD_STATUS_LABEL, LOAD_STATUS_COLOR, driverLabel, laneOf, rpm } from "../lib/loads";
+
+/**
+ * The lane, as "Dallas, TX → Oklahoma City, OK".
+ *
+ * `laneOf` prefers the geocoded stops and falls back to the old
+ * origin/destination text for loads whose stops were never geocoded. The
+ * fallback is rendered muted so the two are distinguishable at a glance:
+ * one is a lane, the other is whatever somebody typed.
+ */
+function LaneCell({ load }: { load: LoadItem }) {
+  const lane = laneOf(load);
+  if (!lane) return <span className="text-muted-foreground">—</span>;
+
+  return (
+    <div
+      className={`flex items-center gap-1.5 ${lane.mapped ? "" : "text-muted-foreground"}`}
+      title={lane.mapped ? undefined : "No geocoded stop — showing the entered addresses"}
+    >
+      <span className="truncate max-w-[160px]">{lane.from}</span>
+      <span className="text-muted-foreground flex-shrink-0">→</span>
+      <span className="truncate max-w-[160px]">{lane.to}</span>
+    </div>
+  );
+}
+
+/**
+ * Truck over trailer, two lines in one cell.
+ *
+ * Read through optional chaining, not a truthiness test: the API drops null
+ * members, and a load whose equipment is entirely unknown serializes as an
+ * empty JSON **array**. `load.equipment ? … : "—"` would take the wrong
+ * branch on every driverless load.
+ */
+function EquipmentCell({ load }: { load: LoadItem }) {
+  const truck   = load.equipment?.truck_number;
+  const trailer = load.equipment?.trailer_number;
+
+  if (!truck && !trailer) return <span className="text-xs text-muted-foreground">—</span>;
+
+  return (
+    <div className="flex flex-col gap-0.5 text-xs font-mono leading-tight">
+      <span className="text-foreground">{truck ?? "—"}</span>
+      <span className="text-muted-foreground">{trailer ?? "—"}</span>
+    </div>
+  );
+}
+
+/**
+ * Loaded over total rate per mile.
+ *
+ * Both are dashes rather than zeros whenever the figure would be meaningless
+ * — no rate (the caller may not hold `loads.view_rate`), or no miles because
+ * the load was never routed.
+ *
+ * `est.` marks figures computed from estimated mileage: that is straight-line
+ * distance, which runs under real road miles, so the RPM derived from it
+ * reads high. Until trucks report a position there is no deadhead leg, so
+ * `total_miles` equals `loaded_miles` and the two lines show the same number.
+ */
+function RpmCell({ load }: { load: LoadItem }) {
+  const loaded = rpm(load.rate, load.loaded_miles);
+  const total  = rpm(load.rate, load.total_miles);
+
+  if (!loaded && !total) return <span className="text-xs text-muted-foreground">—</span>;
+
+  return (
+    <div className="flex flex-col gap-0.5 text-xs font-mono leading-tight">
+      <span className="text-foreground">
+        {loaded ?? "—"} <span className="text-muted-foreground/60">ld</span>
+      </span>
+      <span className="text-muted-foreground">
+        {total ?? "—"} <span className="text-muted-foreground/60">
+          {load.miles_source === "estimated" ? "tot est." : "tot"}
+        </span>
+      </span>
+    </div>
+  );
+}
 
 export default function Loads() {
   const navigate = useNavigate();
@@ -101,10 +179,10 @@ export default function Loads() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px]">
+            <table className="w-full min-w-[1180px]">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  {["Reference", "Route", "Driver", "Pickup", "Delivery", "Rate", "Status", ""].map(h => (
+                  {["Reference", "Lane", "Equipment", "Driver", "Pickup", "Delivery", "Rate", "RPM", "Status", ""].map(h => (
                     <th key={h} className="text-left px-3 py-2.5 text-xs font-mono text-muted-foreground tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -132,15 +210,10 @@ export default function Loads() {
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-xs text-foreground">
-                      {l.origin || l.destination ? (
-                        <div className="flex items-center gap-1.5">
-                          <span>{l.origin || "—"}</span>
-                          <span className="text-muted-foreground">→</span>
-                          <span>{l.destination || "—"}</span>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <LaneCell load={l} />
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <EquipmentCell load={l} />
                     </td>
                     <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap">
                       {l.driver ? driverLabel(l.driver) : <span className="text-muted-foreground">Unassigned</span>}
@@ -153,6 +226,9 @@ export default function Loads() {
                     </td>
                     <td className="px-3 py-2.5 text-xs font-mono text-foreground whitespace-nowrap">
                       {l.rate ? `$${Number(l.rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <RpmCell load={l} />
                     </td>
                     <td className="px-3 py-2.5">
                       <StatusPill
@@ -171,7 +247,7 @@ export default function Loads() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-10 text-center text-xs font-mono text-muted-foreground">No loads found</td>
+                    <td colSpan={10} className="px-3 py-10 text-center text-xs font-mono text-muted-foreground">No loads found</td>
                   </tr>
                 )}
               </tbody>

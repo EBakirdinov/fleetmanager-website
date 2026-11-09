@@ -1,0 +1,82 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        Every load with geocoded stops gets a route: how far it is, how long it takes, and when
+        the truck should arrive. The number that matters most is the one most systems get wrong,
+        so it is worth understanding where it comes from.
+    </p>
+
+    <h2>Loaded and empty miles</h2>
+    <p>
+        The app counts two kinds of distance separately, because they are not the same money:
+    </p>
+    <ul>
+        <li><strong>Loaded miles</strong> — the route through the stops, with freight on.</li>
+        <li><strong>Empty miles</strong> (deadhead) — from where the truck is now to the first pickup.</li>
+    </ul>
+    <p>
+        Total miles is the two added together. Keeping them apart is what lets you see that a
+        well-paying load stopped paying once the truck drove two hundred empty miles to get it.
+    </p>
+
+    <h2>Routed versus estimated</h2>
+    <p>
+        Mileage comes from one of two places, and the app always labels which:
+    </p>
+    <div class="help-scroll">
+        <table>
+            <thead>
+                <tr><th>Source</th><th>How it is measured</th><th>Accuracy</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Routed</strong></td>
+                    <td>Real road distance, via Google Routes</td>
+                    <td>Billable</td>
+                </tr>
+                <tr>
+                    <td><strong>Estimated</strong></td>
+                    <td>Straight line between coordinates</td>
+                    <td>Runs roughly 15–25% under true road miles</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="warn">
+        <p><strong>Do not bill from estimated miles.</strong> A straight line ignores every mountain,
+        river and interstate interchange between the two points. If you see "est." on a load, connect
+        Google Maps with the Routes capability enabled — see
+        <a href="{{ path('help_article', { slug: 'integrations' }) }}">Integrations</a> — and the figure
+        is recalculated as a real route.</p>
+    </div>
+
+    <h2>ETAs</h2>
+    <p>
+        Alongside distance you get drive time and an arrival estimate for the pickup and the
+        delivery. These are driving time from the route, not an hours-of-service projection — they
+        do not know about the driver's remaining hours, breaks or a ten-hour reset. Use them to
+        sanity-check an appointment window, not to promise one.
+    </p>
+
+    <h2>Addresses</h2>
+    <p>
+        Stop addresses autocomplete as you type and are converted to coordinates when saved. That
+        geocoding is what everything else hangs off — without coordinates there is no route, no
+        deadhead, no proximity in <a href="{{ path('help_article', { slug: 'assigning-drivers' }) }}">driver
+        suggestions</a> and no weather. If a stop shows no route, check that its address resolved
+        rather than being typed as free text.
+    </p>
+
+    <h2>Weather at the stop</h2>
+    <p>
+        Each stop with coordinates carries a four-day outlook: high and low, and a reading for the
+        appointment window itself — average temperature, the worst conditions expected and the
+        chance of rain during the window. It needs no account or API key.
+    </p>
+    <p>
+        It is most useful on temperature-sensitive freight and on winter mountain crossings, where
+        knowing the window is the difference between routing around weather and sitting in it.
+    </p>
+{% endblock %}

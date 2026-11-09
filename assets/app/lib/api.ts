@@ -1,3 +1,5 @@
+import type { EffectivePermissions } from "./permissions";
+
 export interface CompanyData {
   id?: number | string;
   name?: string | null;
@@ -32,6 +34,12 @@ export interface User {
   dayOff?: string[] | null;
   paymentSession?: string | null;
   company?: CompanyData | null;
+  /**
+   * Resolved permissions for this user, present only on your own record from
+   * /api/session/me. See lib/permissions.ts for how to read it — prefer
+   * can()/levelOf() over touching this directly.
+   */
+  effectivePermissions?: EffectivePermissions | null;
   [key: string]: unknown;
 }
 
@@ -521,7 +529,256 @@ export async function apiResetWorkerPassword(id: number, password: string): Prom
   await apiProxy<unknown>(`member/${id}/reset_password`, { method: "PATCH", body: JSON.stringify({ password }) });
 }
 
+// ─── Permissions ─────────────────────────────────────────────────────────────
+
+/** One action or field, with the access level that grants it by default. */
+export interface CatalogEntry {
+  key: string;
+  /** Display name from the API's catalog — render this, never `key`. */
+  label: string;
+  min_level: string;
+}
+
+export interface CatalogModule {
+  key: string;
+  label: string;
+  actions: CatalogEntry[];
+  fields: CatalogEntry[];
+}
+
+export interface PermissionCatalog {
+  levels: string[];
+  scopes: string[];
+  roles: { role: string; label: string }[];
+  modules: CatalogModule[];
+}
+
+/** The grant/revoke diff stored against one user. */
+export interface PermissionOverrides {
+  grant: string[];
+  revoke: string[];
+}
+
+export interface MemberPermissions {
+  role: string | null;
+  overrides: PermissionOverrides;
+  effective: EffectivePermissions;
+}
+
+/**
+ * The permission vocabulary, so the override editor renders from the API's
+ * catalog rather than a hardcoded copy of it.
+ *
+ * Goes through the proxy, which does not camelize keys — hence `min_level`.
+ */
+export async function apiPermissionCatalog(): Promise<PermissionCatalog> {
+  const res = await apiProxy<{ outcome: string; data: PermissionCatalog }>("permissions/catalog");
+  return res.data;
+}
+
+export async function apiGetMemberPermissions(id: number): Promise<MemberPermissions> {
+  const res = await apiProxy<{ outcome: string; data: MemberPermissions }>(`member/${id}/permissions`);
+  return res.data;
+}
+
+/**
+ * Replaces both lists outright, so the editor can send the state of its
+ * checkboxes without diffing.
+ */
+export async function apiSetMemberPermissions(
+  id: number,
+  overrides: PermissionOverrides,
+): Promise<MemberPermissions> {
+  const res = await apiProxy<{ outcome: string; data: MemberPermissions }>(
+    `member/${id}/permissions`,
+    { method: "PATCH", body: JSON.stringify(overrides) },
+  );
+  return res.data;
+}
+
 // ─── Loads ───────────────────────────────────────────────────────────────────
+
+/**
+ * A broker, direct shipper or 3PL — whoever tendered the freight.
+ *
+ * Every member past `id` is optional because the serializer omits nulls, and
+ * because two of them are permission-gated: `credit_limit` and `days_to_pay`
+ * live outside [Default] and are **absent**, not null, for a caller without
+ * `brokers.view_credit`. Check presence, never truthiness, before rendering
+ * them — the same way Expenses reads `amount`.
+ */
+export interface BrokerItem {
+  id: number;
+  status?: number;
+  type?: string | null;
+  name?: string | null;
+  dba?: string | null;
+  /** "Name (DBA)", built server-side by Broker::getDisplayName(). */
+  display_name?: string | null;
+  mc_number?: string | null;
+  dot_number?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  contact_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  bill_to_name?: string | null;
+  bill_to_address?: string | null;
+  billing_email?: string | null;
+  payment_terms_days?: number | null;
+  quick_pay_available?: boolean | null;
+  /** Doctrine decimal, so a numeric string ("3.00"). */
+  quick_pay_fee_percent?: string | null;
+  /** Gated behind brokers.view_credit — absent, not null, without it. */
+  credit_limit?: string | null;
+  /** Gated behind brokers.view_credit. */
+  days_to_pay?: number | null;
+  carrier_packet_signed_on?: string | null;
+  insurance_cert_on_file?: boolean | null;
+  /** Who to call first. The opposite pole to do_not_load, and independent of it. */
+  is_preferred?: boolean | null;
+  do_not_load?: boolean | null;
+  do_not_load_reason?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/**
+ * One broker's track record, from GET broker/summary.
+ *
+ * `revenue` and `rate_per_mile` ride `loads.view_rate` rather than a broker
+ * key of its own — these figures *are* load rate, aggregated — so they are
+ * absent for a caller who may not see a single load's rate. `loads` and
+ * `miles` always come through.
+ *
+ * `rate_per_mile` is null rather than "0.00" when nothing has been priced or
+ * nothing has been routed; $0.00/mi beside real mileage reads as a loss
+ * rather than as missing data.
+ */
+export interface BrokerSummaryRow {
+  broker_id: number;
+  loads: number;
+  miles?: string | null;
+  revenue?: string | null;
+  rate_per_mile?: string | null;
+  last_delivery?: string | null;
+  /**
+   * Share of deliveries that landed on or before the due date, over the
+   * `on_time_of` loads carrying both a recorded delivery and a due date.
+   * Absent until at least one such load exists — every load booked before
+   * `load.delivered_at` was introduced has none, so the figure accrues
+   * forward rather than starting at a fabricated 100%.
+   */
+  on_time_pct?: number | null;
+  on_time_of?: number;
+  /**
+   * Accounts receivable. These four ride `billing.view_invoices`, a separate
+   * gate from `loads.view_rate` — "may they see what a load was worth" and
+   * "may they see the books" are different questions — and are **absent, not
+   * null**, without it.
+   */
+  invoices?: number;
+  total_paid?: string | null;
+  outstanding?: string | null;
+  avg_pay_days?: number | null;
+}
+
+export async function apiListBrokers(): Promise<BrokerItem[]> {
+  const res = await apiProxy<{ outcome: string; data: PaginatedData<BrokerItem> }>(
+    "broker?count=200&sort=name:asc",
+  );
+  return pageItems(res);
+}
+
+/** Performance for every broker at once, keyed by broker id. */
+export async function apiBrokerSummary(year?: number): Promise<Record<string, BrokerSummaryRow>> {
+  const qs = year ? `?year=${year}` : "";
+  const res = await apiProxy<{ outcome: string; data: Record<string, BrokerSummaryRow> | [] }>(
+    `broker/summary${qs}`,
+  );
+  const data = res?.data;
+  // An empty rollup serializes as [] rather than {} — PHP cannot tell an
+  // empty map from an empty list.
+  return Array.isArray(data) || !data ? {} : data;
+}
+
+/**
+ * One row of the directory's "Recent Loads Booked" panel.
+ *
+ * A purpose-built projection, not a `LoadItem`: `booked_by` is a plain
+ * "First Last" string because the API deliberately refuses to nest the User
+ * behind `load.created_by_id`. `rate` rides `loads.view_rate` and is
+ * **absent, not null**, without it — check presence, never truthiness.
+ */
+export interface RecentBookedLoad {
+  id: number;
+  reference_number?: string | null;
+  broker_load_number?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  /** The requirement recorded on the load, not the trailer currently hooked up. */
+  trailer_type?: string | null;
+  load_type?: string | null;
+  status: string;
+  rate?: string | null;
+  booked_on?: string | null;
+  broker_id: number;
+  broker_name?: string | null;
+  booked_by?: string | null;
+}
+
+export async function apiBrokerRecentLoads(brokerId?: number, limit = 10): Promise<RecentBookedLoad[]> {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (brokerId) qs.set("broker", String(brokerId));
+
+  const res = await apiProxy<{ outcome: string; data: RecentBookedLoad[] }>(`broker/recent-loads?${qs}`);
+  return res?.data ?? [];
+}
+
+/** One lane of the "Top Lanes by Broker" donut. */
+export interface LaneRow {
+  /** "Dallas, TX" — the first pickup's city and state. */
+  origin: string;
+  /** "Memphis, TN" — the last delivery's. */
+  destination: string;
+  loads: number;
+}
+
+/**
+ * The lane rollup.
+ *
+ * `unmapped` is loads with a broker that no lane could be built for, because
+ * a stop has no geocoded city. The panel has to show it: a donut that totals
+ * less than the fleet hauled, without saying so, is worse than no donut.
+ */
+export interface LaneRollup {
+  lanes: LaneRow[];
+  mapped: number;
+  unmapped: number;
+}
+
+export async function apiBrokerLanes(brokerId?: number, limit = 5): Promise<LaneRollup> {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (brokerId) qs.set("broker", String(brokerId));
+
+  const res = await apiProxy<{ outcome: string; data: LaneRollup }>(`broker/lanes?${qs}`);
+  return res?.data ?? { lanes: [], mapped: 0, unmapped: 0 };
+}
+
+export async function apiCreateBroker(data: Record<string, unknown>): Promise<void> {
+  await apiProxy<unknown>("broker", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function apiUpdateBroker(id: number, data: Record<string, unknown>): Promise<void> {
+  await apiProxy<unknown>(`broker/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export async function apiDeleteBroker(id: number): Promise<void> {
+  await apiProxy<unknown>(`broker/${id}`, { method: "DELETE" });
+}
 
 export interface LoadItem {
   id: number;
@@ -531,8 +788,21 @@ export interface LoadItem {
   destination?:      string | null;
   pickup_date?:      string | null;
   delivery_date?:    string | null;
-  /** Doctrine decimal comes across as a numeric string ("1250.00"). */
-  rate?:             string | null;
+  /**
+   * Load.yml declares this `type: float`, so it arrives as a JSON **number**
+   * (`620.0`), not the string the other money fields use. Gated behind
+   * `loads.view_rate` — absent, not null, without it.
+   */
+  rate?:             number | null;
+
+  /**
+   * Who tendered the load. Nested rather than an id so the Load form can
+   * show the terms and the do-not-load warning without a second request.
+   * Its own credit fields stay gated inside this object.
+   */
+  broker?: BrokerItem | null;
+  /** The broker's own number for this load, off their rate confirmation. */
+  broker_load_number?: string | null;
 
   /**
    * The assigned driver. `email` and `assigned_truck` were always in the
@@ -633,6 +903,15 @@ export interface LoadStopItem {
   store_dc?:       string | null;
   latitude?:       number | null;
   longitude?:      number | null;
+  /**
+   * Structured geography, filled from the geocode — not typed by anyone.
+   * `address` stays the raw string the dispatcher or Google's autocomplete
+   * left behind; these are what the lane is built from. Absent on stops that
+   * were never geocoded.
+   */
+  city?:           string | null;
+  state?:          string | null;
+  zip?:            string | null;
 }
 
 /**
@@ -1228,8 +1507,34 @@ export async function apiTestIntegration(
   return res.results ?? {};
 }
 
-export async function apiDeleteIntegration(slug: string): Promise<void> {
-  await apiProxy<{ ok: true }>(`integration/${slug}`, { method: "DELETE" });
+/** How many local records an ELD currently owns, from GET /integration/{slug}/linked. */
+export interface IntegrationLinkedCounts {
+  trucks:  number;
+  drivers: number;
+}
+
+/**
+ * How many trucks and drivers this ELD imported. Zeros for an integration
+ * that imports nothing, so the caller doesn't have to know which types do.
+ *
+ * Asked before offering a disconnect: the provenance on these records is what
+ * makes the next ELD refuse them, so the warning has to name a number.
+ */
+export async function apiGetIntegrationLinked(slug: string): Promise<IntegrationLinkedCounts> {
+  return apiProxy<IntegrationLinkedCounts>(`integration/${slug}/linked`);
+}
+
+/**
+ * `unlink` releases the provider's claim on the trucks and drivers it
+ * imported — the difference between disconnecting an ELD and switching to a
+ * different one. Without it the records keep the old provenance and the next
+ * ELD refuses them with "Already linked to …".
+ */
+export async function apiDeleteIntegration(slug: string, unlink = false): Promise<void> {
+  await apiProxy<{ ok: true; unlinked?: IntegrationLinkedCounts }>(
+    `integration/${slug}${unlink ? "?unlink=1" : ""}`,
+    { method: "DELETE" },
+  );
 }
 
 /**
@@ -1253,13 +1558,14 @@ export async function apiGetIntegrationConfig<T = Record<string, string>>(slug: 
  *   - "imported" — already linked to this ELD (nothing to do).
  *   - "vin"      — a local Truck exists with the same VIN (offer to link).
  *   - "license"  — same for Driver by license number.
+ *   - "name"     — Driver only: no license match, but the name matches.
  */
 export interface EldImportMatch {
-  type:       "imported" | "vin" | "license";
+  type:       "imported" | "vin" | "license" | "name";
   localId:    number;
   localLabel: string;
   /**
-   * Which ELD owns the matched record, on "vin"/"license" matches only.
+   * Which ELD owns the matched record, on "vin"/"license"/"name" matches only.
    * Null means nobody does — a manually-created record, free to link. A slug
    * means another ELD already manages it and the API will refuse the link
    * (linking would move the record's provenance and strand it on the other
@@ -1407,4 +1713,562 @@ interface FleetCacheEnvelope<T> {
 export async function apiGetFleetLocations(): Promise<TruckLocation[]> {
   const res = await apiProxy<FleetCacheEnvelope<TruckLocation>>("fleet/locations");
   return res.items ?? [];
+}
+
+// ─── Expenses ────────────────────────────────────────────────────────────────
+// The ledger. Unlike trucks or loads, this list is filtered and paged on the
+// server: a fifty-truck fleet books thousands of fuel rows a month and keeps
+// them forever, so `?count=200` and a client-side filter would stop working
+// in the first quarter.
+//
+// Money fields are optional on every type below, and that is a real state
+// rather than defensive typing: `expenses.view_amounts` is a field permission,
+// and a caller without it gets the row with every figure *absent*. A
+// Dispatcher can work the unassigned-purchase queue without being shown what
+// the fleet spends.
+
+export interface FuelDetailItem {
+  id: number;
+  quantity?: string;
+  quantity_unit?: string;
+  fuel_grade?: string;
+  unit_price?: string;
+  retail_unit_price?: string;
+  savings_amount?: string;
+  non_fuel_amount?: string;
+}
+
+export interface ExpenseItem {
+  id: number;
+  status: number;
+  category: string;
+  subcategory?: string;
+  description?: string;
+  occurred_at: string;
+  occurred_on: string;
+  posted_at?: string;
+  amount?: string;
+  currency?: string;
+  tax_amount?: string;
+  discount_amount?: string;
+  vendor_name?: string;
+  location_city?: string;
+  location_state?: string;
+  location_zip?: string;
+  payment_method?: string;
+  card_last4?: string;
+  truck?: TruckItem | null;
+  trailer?: { id: number; trailer_number?: string } | null;
+  driver?: DriverItem | null;
+  load?: { id: number; reference_number?: string } | null;
+  odometer_miles?: number;
+  billable?: boolean;
+  review_status: string;
+  receipt_hash?: string;
+  notes?: string;
+  /** Integration slug that produced the row; absent means somebody typed it. */
+  source?: string;
+  external_id?: string;
+  imported_at?: string;
+  fuel_detail?: FuelDetailItem | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ExpenseSummary {
+  total: string;
+  count: number;
+  by_category: Record<string, { amount: string; count: number }>;
+}
+
+export interface ExpensePage {
+  items: ExpenseItem[];
+  page: number;
+  pages: number;
+  total: number;
+  limit: number;
+}
+
+export interface VendorTotal {
+  vendor: string;
+  amount: string;
+  count: number;
+}
+
+/**
+ * Filters accepted by the ledger endpoints. Repeated keys (category, and the
+ * other set-valued ones) go out as `category[]=fuel&category[]=tolls`, which
+ * is what Symfony's query parser reads back as an array.
+ */
+export interface ExpenseFilters {
+  page?: number;
+  count?: number;
+  date_from?: string;
+  date_to?: string;
+  category?: string[];
+  payment_method?: string[];
+  review_status?: string[];
+  source?: string[];
+  vendor?: string;
+  truck?: number;
+  driver?: number;
+  billable?: boolean;
+  manual_only?: boolean;
+  imported_only?: boolean;
+  odometer_min?: number;
+  odometer_max?: number;
+  search?: string;
+  sort?: string;
+}
+
+function expenseQuery(filters: ExpenseFilters): string {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined || value === null || value === "") continue;
+
+    if (Array.isArray(value)) {
+      // Empty array means "no filter", not "match nothing".
+      for (const entry of value) params.append(`${key}[]`, String(entry));
+    } else if (typeof value === "boolean") {
+      if (value) params.set(key, "1");
+    } else {
+      params.set(key, String(value));
+    }
+  }
+
+  const query = params.toString();
+  return query === "" ? "" : `?${query}`;
+}
+
+export async function apiListExpenses(filters: ExpenseFilters = {}): Promise<ExpensePage> {
+  const res = await apiProxy<{ outcome: string; data: PaginatedData<ExpenseItem> }>(
+    `expense${expenseQuery(filters)}`,
+  );
+  const d = res?.data;
+  return {
+    items: pageItems(res),
+    page:  d?.page  ?? 1,
+    pages: d?.pages ?? 1,
+    total: d?.total ?? 0,
+    limit: d?.limit ?? 0,
+  };
+}
+
+/**
+ * Totals over the whole filtered set, not the current page — a headline
+ * figure that changed when you paged forward would be worse than none.
+ */
+export async function apiExpenseSummary(filters: ExpenseFilters = {}): Promise<ExpenseSummary> {
+  const res = await apiProxy<{ outcome: string; data: ExpenseSummary }>(
+    `expense/summary${expenseQuery(filters)}`,
+  );
+  return res.data;
+}
+
+export async function apiExpenseVendors(filters: ExpenseFilters = {}): Promise<VendorTotal[]> {
+  const res = await apiProxy<{ outcome: string; data: VendorTotal[] }>(
+    `expense/vendors${expenseQuery(filters)}`,
+  );
+  return res.data ?? [];
+}
+
+export async function apiGetExpense(id: number): Promise<ExpenseItem> {
+  const res = await apiProxy<{ outcome: string; data: ExpenseItem }>(`expense/${id}`);
+  return res.data;
+}
+
+/** Request bodies are camelCase — they bind to Symfony forms. */
+export async function apiCreateExpense(data: Record<string, unknown>): Promise<ExpenseItem> {
+  const res = await apiProxy<{ outcome: string; data: ExpenseItem }>("expense", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return res.data;
+}
+
+export async function apiUpdateExpense(id: number, data: Record<string, unknown>): Promise<void> {
+  await apiProxy<unknown>(`expense/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export async function apiDeleteExpense(id: number): Promise<void> {
+  await apiProxy<unknown>(`expense/${id}`, { method: "DELETE" });
+}
+
+export async function apiUploadExpenseReceipt(id: number, file: File): Promise<string> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await apiUploadForm<{ outcome: string; data: { receiptHash: string } }>(
+    `expense/${id}/receipt`,
+    body,
+  );
+  return res.data.receiptHash;
+}
+
+// ─── Maintenance ─────────────────────────────────────────────────────────────
+
+export interface MaintenanceItem {
+  id: number;
+  status: number;
+  kind: string;
+  state: string;
+  service_type: string;
+  truck?: TruckItem | null;
+  trailer?: { id: number; trailer_number?: string } | null;
+  description?: string;
+  performed_on?: string;
+  scheduled_for?: string;
+  odometer_miles?: number;
+  vendor_name?: string;
+  work_order_number?: string;
+  invoice_number?: string;
+  estimated_cost?: string;
+  cost?: string;
+  notes?: string;
+  source?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MaintenanceScheduleItem {
+  id: number;
+  status: number;
+  truck?: TruckItem | null;
+  service_type: string;
+  interval_miles?: number;
+  interval_days?: number;
+  last_service_on?: string;
+  last_service_odometer?: number;
+  alert_before_miles?: number;
+  alert_before_days?: number;
+}
+
+/**
+ * One computed due/overdue line. Every key is always present — the endpoint
+ * serializes nulls deliberately so "no odometer reading" is distinguishable
+ * from a field that was never sent.
+ */
+export interface MaintenanceDueItem {
+  truck_id: number;
+  truck_number: string | null;
+  service_type: string;
+  due_state: "on_track" | "due_soon" | "overdue";
+  current_mileage: number | null;
+  next_due_mileage: number | null;
+  miles_until_due: number | null;
+  next_due_on: string | null;
+  days_until_due: number | null;
+  interval_miles: number | null;
+  interval_days: number | null;
+  schedule_id: number;
+  overridden: boolean;
+}
+
+export interface MaintenanceVendorRow {
+  vendor: string;
+  invoices: number;
+  total: string;
+  average: string;
+  open_estimates: string;
+}
+
+export interface MaintenanceFilters {
+  page?: number;
+  count?: number;
+  kind?: string[];
+  state?: string[];
+  service_type?: string[];
+  truck?: number;
+  date_from?: string;
+  date_to?: string;
+  vendor?: string;
+  search?: string;
+}
+
+export async function apiListMaintenance(filters: MaintenanceFilters = {}): Promise<MaintenanceItem[]> {
+  const res = await apiProxy<{ outcome: string; data: PaginatedData<MaintenanceItem> }>(
+    `maintenance${expenseQuery(filters as ExpenseFilters)}`,
+  );
+  return pageItems(res);
+}
+
+export async function apiMaintenanceDue(state?: string): Promise<MaintenanceDueItem[]> {
+  const res = await apiProxy<{ outcome: string; data: MaintenanceDueItem[] }>(
+    `maintenance/due${state ? `?state=${encodeURIComponent(state)}` : ""}`,
+  );
+  return res.data ?? [];
+}
+
+export async function apiMaintenanceVendors(year?: number): Promise<MaintenanceVendorRow[]> {
+  const res = await apiProxy<{ outcome: string; data: MaintenanceVendorRow[] }>(
+    `maintenance/vendors${year ? `?year=${year}` : ""}`,
+  );
+  return res.data ?? [];
+}
+
+/**
+ * One row of the per-truck rollup. Only trucks that have records appear, so
+ * the By-truck table left-joins this onto the truck list rather than treating
+ * it as the roster.
+ *
+ * `total` and `open_estimates` are absent for a caller without
+ * `expenses.view_amounts`, the same way the vendor rollup drops them.
+ */
+export interface MaintenanceTruckRow {
+  truck_id: number;
+  truck_number: string | null;
+  records: number;
+  open_jobs: number;
+  total?: string;
+  open_estimates?: string;
+  last_service_on: string | null;
+}
+
+export async function apiMaintenanceTrucks(): Promise<MaintenanceTruckRow[]> {
+  const res = await apiProxy<{ outcome: string; data: MaintenanceTruckRow[] }>("maintenance/trucks");
+  return res.data ?? [];
+}
+
+export async function apiCreateMaintenance(data: Record<string, unknown>): Promise<MaintenanceItem> {
+  const res = await apiProxy<{ outcome: string; data: MaintenanceItem }>("maintenance", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return res.data;
+}
+
+export async function apiUpdateMaintenance(id: number, data: Record<string, unknown>): Promise<void> {
+  await apiProxy<unknown>(`maintenance/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export async function apiDeleteMaintenance(id: number): Promise<void> {
+  await apiProxy<unknown>(`maintenance/${id}`, { method: "DELETE" });
+}
+
+export async function apiListMaintenanceSchedules(): Promise<MaintenanceScheduleItem[]> {
+  const res = await apiProxy<{ outcome: string; data: PaginatedData<MaintenanceScheduleItem> }>(
+    "maintenance/schedule?count=200",
+  );
+  return pageItems(res);
+}
+
+export async function apiCreateMaintenanceSchedule(data: Record<string, unknown>): Promise<void> {
+  await apiProxy<unknown>("maintenance/schedule", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function apiUpdateMaintenanceSchedule(id: number, data: Record<string, unknown>): Promise<void> {
+  await apiProxy<unknown>(`maintenance/schedule/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export async function apiDeleteMaintenanceSchedule(id: number): Promise<void> {
+  await apiProxy<unknown>(`maintenance/schedule/${id}`, { method: "DELETE" });
+}
+
+/* ── Employee Retention ─────────────────────────────────────────────────── */
+
+/**
+ * The five headline metrics.
+ *
+ * Every figure here is nullable, and the page must render null as an
+ * em-dash rather than a zero. Almost no driver on an ELD-imported roster has
+ * a hire date, so "0.0 yrs average tenure" would be a lie that looks like a
+ * fact. `data_gaps` says which field to go and fill in.
+ */
+export interface RetentionSummary {
+  current_drivers: number;
+  avg_tenure_years: number | null;
+  retention_rate_12m: number | null;
+  on_the_road: number;
+  upcoming_reviews: number | null;
+  past_drivers: number;
+  hired_this_month: number;
+  left_this_month: number;
+  review_window_days: number;
+  data_gaps: {
+    total_drivers: number;
+    current_drivers: number;
+    missing_hire_date: number;
+    missing_terminal: number;
+    missing_email: number;
+    missing_phone: number;
+  };
+}
+
+export interface RetentionDriverRow {
+  id: number;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  driver_number: string | null;
+  status: string;
+  truck: { id: number; number: string | null } | null;
+  hire_date: string | null;
+  terminated_at: string | null;
+  separation_reason: string | null;
+  tenure_days: number | null;
+  home_terminal: string | null;
+  city: string | null;
+  state: string | null;
+  email: string | null;
+  phone: string | null;
+  on_the_road: boolean;
+  active_load_count: number;
+  last_active: string | null;
+}
+
+export interface RetentionDriverPage {
+  items: RetentionDriverRow[];
+  total: number;
+  page: number;
+  count: number;
+}
+
+export interface RetentionReview {
+  driver_id: number;
+  name: string;
+  driver_number: string | null;
+  home_terminal: string | null;
+  hire_date: string | null;
+  tenure_days: number | null;
+  milestone: string;
+  milestone_key: string;
+  due_on: string;
+  days_until: number;
+}
+
+export type CommunicationChannel = "email" | "sms" | "both";
+export type CommunicationAudience = "current" | "past" | "all" | "custom";
+
+export interface CommunicationRecipient {
+  id: number;
+  driver_id: number | null;
+  driver_name: string;
+  email_address: string | null;
+  phone_number: string | null;
+  email_state: "sent" | "failed" | "skipped" | null;
+  sms_state: "sent" | "failed" | "skipped" | null;
+  email_error: string | null;
+  sms_error: string | null;
+  created_at: string;
+}
+
+export interface CommunicationItem {
+  id: number;
+  channel: CommunicationChannel;
+  audience: CommunicationAudience;
+  subject: string | null;
+  body: string;
+  sent_at: string | null;
+  recipient_count: number;
+  email_sent: number;
+  email_failed: number;
+  sms_sent: number;
+  sms_failed: number;
+  /** Only on the detail route — the list deliberately leaves them out. */
+  recipients?: CommunicationRecipient[];
+}
+
+/** How many of an audience can actually be reached on each channel. */
+export interface AudienceReach {
+  total: number;
+  email: number;
+  sms: number;
+}
+
+export interface RetentionDriverFilters {
+  cohort?: "current" | "past";
+  status?: string;
+  terminal?: string;
+  separation_reason?: string;
+  search?: string;
+  page?: number;
+  count?: number;
+}
+
+function retentionQuery(filters: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined || value === null || value === "") continue;
+    params.set(key, String(value));
+  }
+  const query = params.toString();
+  return query === "" ? "" : `?${query}`;
+}
+
+export async function apiRetentionSummary(): Promise<RetentionSummary> {
+  const res = await apiProxy<{ outcome: string; data: RetentionSummary }>("retention/summary");
+  return res.data;
+}
+
+export async function apiRetentionDrivers(
+  filters: RetentionDriverFilters = {},
+): Promise<RetentionDriverPage> {
+  const res = await apiProxy<{ outcome: string; data: RetentionDriverPage }>(
+    `retention/drivers${retentionQuery(filters as Record<string, unknown>)}`,
+  );
+  return res.data ?? { items: [], total: 0, page: 1, count: 0 };
+}
+
+export async function apiRetentionTerminals(): Promise<string[]> {
+  const res = await apiProxy<{ outcome: string; data: string[] }>("retention/terminals");
+  return res.data ?? [];
+}
+
+export async function apiRetentionReviews(days?: number): Promise<RetentionReview[]> {
+  const res = await apiProxy<{ outcome: string; data: RetentionReview[] }>(
+    `retention/reviews${days ? `?days=${days}` : ""}`,
+  );
+  return res.data ?? [];
+}
+
+export async function apiRetentionAudience(
+  audience: CommunicationAudience,
+  driverIds: number[] = [],
+): Promise<AudienceReach> {
+  const res = await apiProxy<{ outcome: string; data: AudienceReach }>(
+    `retention/communications/audience${retentionQuery({
+      audience,
+      driver_ids: driverIds.length ? driverIds.join(",") : "",
+    })}`,
+  );
+  return res.data ?? { total: 0, email: 0, sms: 0 };
+}
+
+export async function apiListCommunications(count = 10): Promise<CommunicationItem[]> {
+  const res = await apiProxy<{ outcome: string; data: PaginatedData<CommunicationItem> }>(
+    `retention/communications?count=${count}`,
+  );
+  return pageItems(res);
+}
+
+export async function apiGetCommunication(id: number): Promise<CommunicationItem> {
+  const res = await apiProxy<{ outcome: string; data: CommunicationItem }>(
+    `retention/communications/${id}`,
+  );
+  return res.data;
+}
+
+/**
+ * Composes and sends in one call — the API has no draft state.
+ *
+ * `idempotencyKey` is not optional in practice: it is what makes a
+ * double-clicked Send bill once instead of twice. Generate one per compose.
+ */
+export async function apiSendCommunication(data: {
+  channel: CommunicationChannel;
+  audience: CommunicationAudience;
+  subject?: string | null;
+  body: string;
+  driver_ids?: number[];
+  idempotency_key: string;
+}): Promise<CommunicationItem> {
+  const res = await apiProxy<{ outcome: string; data: CommunicationItem }>(
+    "retention/communications",
+    { method: "POST", body: JSON.stringify(data) },
+  );
+  return res.data;
+}
+
+export async function apiDeleteCommunication(id: number): Promise<void> {
+  await apiProxy<unknown>(`retention/communications/${id}`, { method: "DELETE" });
 }

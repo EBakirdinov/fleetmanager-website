@@ -1,0 +1,99 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        Maintenance has two halves: <strong>schedules</strong>, which say when something is due,
+        and <strong>records</strong>, which say what was actually done. Schedules are set once and
+        mostly left alone; records accumulate as work happens.
+    </p>
+
+    <h2>Schedules</h2>
+    <p>
+        A schedule is a service type plus an interval. Set it <strong>fleet-wide</strong> and it
+        applies to every truck; set one on a <strong>specific truck</strong> and it overrides the
+        fleet default for that truck only.
+    </p>
+    <p>
+        That two-level arrangement is the point. Oil every 25,000 miles across the fleet, every
+        15,000 on the one truck that runs mountain grades all day — one override, no exceptions
+        list to maintain.
+    </p>
+    <p>An interval can be set in:</p>
+    <ul>
+        <li><strong>Miles</strong> — service every <em>n</em> miles since the last one.</li>
+        <li><strong>Days</strong> — service every <em>n</em> days.</li>
+        <li><strong>Both</strong> — whichever arrives first, which is usually what you want.</li>
+    </ul>
+    <p>
+        Each schedule also has an alert threshold — how many miles or days ahead it should start
+        warning you. The defaults are 1,000 miles and 7 days.
+    </p>
+
+    <h2>Due states</h2>
+    <p>Every truck and schedule combination resolves to one of three states:</p>
+    <div class="help-scroll">
+        <table>
+            <thead>
+                <tr><th>State</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>On track</strong></td><td>Outside the alert threshold.</td></tr>
+                <tr><td><strong>Due soon</strong></td><td>Inside the threshold — within the next 1,000 miles or 7 days, by default.</td></tr>
+                <tr><td><strong>Overdue</strong></td><td>Past the interval.</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p>
+        These are <strong>worked out every time you look</strong>, against the truck's current
+        odometer and today's date. Nothing is stored and nothing has to be recalculated on a
+        schedule, so a state is never stale — and there is no flag anyone can forget to clear.
+    </p>
+
+    <div class="warn">
+        <p>Mileage-based intervals are only as good as the odometer. With an
+        <a href="{{ path('help_article', { slug: 'integrations' }) }}">ELD connected</a> that number
+        updates itself; without one you are typing it in, and a truck whose reading has not been
+        updated in two months will not come due when it should.</p>
+    </div>
+
+    <h2>The due list</h2>
+    <p>
+        The maintenance view shows the whole fleet ordered worst-first — overdue at the top, then
+        due soon — with miles and days remaining for each. It is built to be read top-down in the
+        morning and stopped at when you reach the trucks that are fine.
+    </p>
+
+    <h2>Records</h2>
+    <p>A record is one piece of work, and comes in three kinds:</p>
+    <ul>
+        <li><strong>Service</strong> — scheduled preventive work.</li>
+        <li><strong>Repair order</strong> — something that broke.</li>
+        <li><strong>Estimate</strong> — quoted but not yet approved.</li>
+    </ul>
+    <p>
+        Each moves through <strong>scheduled → in progress → completed</strong>, or
+        <strong>cancelled</strong>. There are thirteen service types — oil change, brake
+        inspection, tyre rotation and replacement, DOT inspection, PM service, DEF/emissions,
+        transmission, coolant, air filter, alignment, body work and other.
+    </p>
+    <p>
+        A record carries the vendor, work order and invoice numbers, the odometer at the time, an
+        estimated cost and the actual cost. Recording the odometer on the record is what resets
+        the interval, so do not skip it.
+    </p>
+
+    <h2>Costs reach the ledger by themselves</h2>
+    <p>
+        A completed record with a cost creates a matching line on the
+        <a href="{{ path('help_article', { slug: 'expenses' }) }}">expense ledger</a>
+        automatically, and keeps it in step if the cost changes. You do not enter maintenance
+        spend twice, and fleet cost totals include the shop without anyone re-keying invoices.
+    </p>
+
+    <h2>Vendor spend</h2>
+    <p>
+        Work is grouped by shop: how many invoices, total spent, the average, and how many
+        estimates are still open. Filter it by year. The open-estimates figure is the one worth
+        watching — it is quoted work that has neither been approved nor declined.
+    </p>
+{% endblock %}

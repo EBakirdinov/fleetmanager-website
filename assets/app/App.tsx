@@ -1,7 +1,7 @@
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router";
 import AppShell from "./shell/AppShell";
-import { RequireAuth, RequireRole } from "./lib/auth";
-import { WORKER_ADMIN_ROLES } from "./lib/roles";
+import { RequireAuth, RequirePermission } from "./lib/auth";
+import { MODULES } from "./lib/permissions";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
@@ -12,6 +12,10 @@ import Loads from "./pages/Loads";
 import LoadAdd from "./pages/LoadAdd";
 import LoadEdit from "./pages/LoadEdit";
 import Fuel from "./pages/Fuel";
+import Brokers from "./pages/Brokers";
+import Expenses from "./pages/Expenses";
+import Maintenance from "./pages/Maintenance";
+import EmployeeRetention from "./pages/EmployeeRetention";
 import Reports from "./pages/Reports";
 import Documents from "./pages/Documents";
 import Integrations from "./pages/Integrations";
@@ -21,8 +25,6 @@ import AccountSettings from "./pages/settings/AccountSettings";
 import SecuritySettings from "./pages/settings/SecuritySettings";
 import CompanySettings from "./pages/settings/CompanySettings";
 import BillingSettings from "./pages/settings/BillingSettings";
-
-const OWNER_ONLY = ["ROLE_OWNER"];
 
 const router = createBrowserRouter([
   { path: "/login",    Component: Login    },
@@ -36,16 +38,24 @@ const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
-      { path: "dashboard", Component: Dashboard },
-      { path: "trucks",    Component: Trucks    },
-      { path: "trailers",  Component: Trailers  },
-      { path: "drivers",   Component: Drivers   },
-      { path: "loads",     Component: Loads     },
-      { path: "loads/new", Component: LoadAdd   },
-      { path: "loads/:id", Component: LoadEdit  },
-      { path: "fuel",      Component: Fuel      },
-      { path: "reports",   Component: Reports   },
-      { path: "documents", Component: Documents },
+      // Gated on their permission module. These were open to anyone signed
+      // in, which is what let a Dispatcher reach every page in the app. The
+      // editor routes ask for "manage" rather than mere visibility, so a
+      // view-only user cannot open a form they are unable to submit.
+      { path: "dashboard", element: <RequirePermission module={MODULES.dashboard}><Dashboard /></RequirePermission> },
+      { path: "trucks",    element: <RequirePermission module={MODULES.trucks}><Trucks /></RequirePermission>       },
+      { path: "trailers",  element: <RequirePermission module={MODULES.trailers}><Trailers /></RequirePermission>   },
+      { path: "drivers",   element: <RequirePermission module={MODULES.drivers}><Drivers /></RequirePermission>     },
+      { path: "loads",     element: <RequirePermission module={MODULES.loads}><Loads /></RequirePermission>         },
+      { path: "loads/new", element: <RequirePermission module={MODULES.loads} level="manage"><LoadAdd /></RequirePermission>  },
+      { path: "loads/:id", element: <RequirePermission module={MODULES.loads}><LoadEdit /></RequirePermission>      },
+      { path: "brokers",     element: <RequirePermission module={MODULES.brokers}><Brokers /></RequirePermission>         },
+      { path: "expenses",    element: <RequirePermission module={MODULES.expenses}><Expenses /></RequirePermission>       },
+      { path: "maintenance", element: <RequirePermission module={MODULES.maintenance}><Maintenance /></RequirePermission> },
+      { path: "retention",   element: <RequirePermission module={MODULES.employeeRetention}><EmployeeRetention /></RequirePermission> },
+      { path: "fuel",      element: <RequirePermission module={MODULES.reports}><Fuel /></RequirePermission>        },
+      { path: "reports",   element: <RequirePermission module={MODULES.reports}><Reports /></RequirePermission>     },
+      { path: "documents", element: <RequirePermission module={MODULES.documents}><Documents /></RequirePermission> },
 
       // Every settings destination lives under one hub, and every one of them
       // is guarded at the route rather than inside the page — Company used to
@@ -57,13 +67,13 @@ const router = createBrowserRouter([
           { index: true, element: <Navigate to="/settings/account" replace /> },
           { path: "account",  Component: AccountSettings  },
           { path: "security", Component: SecuritySettings },
-          { path: "company",      element: <RequireRole roles={WORKER_ADMIN_ROLES}><CompanySettings /></RequireRole> },
-          { path: "billing",      element: <RequireRole roles={WORKER_ADMIN_ROLES}><BillingSettings /></RequireRole> },
-          { path: "integrations", element: <RequireRole roles={OWNER_ONLY}>        <Integrations />   </RequireRole> },
+          { path: "company",      element: <RequirePermission module={MODULES.settings}><CompanySettings /></RequirePermission>         },
+          { path: "billing",      element: <RequirePermission module={MODULES.billing}><BillingSettings /></RequirePermission>          },
+          { path: "integrations", element: <RequirePermission module={MODULES.integrations}><Integrations /></RequirePermission>         },
         ],
       },
 
-      { path: "workers", element: <RequireRole roles={WORKER_ADMIN_ROLES}><Workers /></RequireRole> },
+      { path: "workers", element: <RequirePermission module={MODULES.users}><Workers /></RequirePermission> },
 
       // The pre-hub URLs. Kept so bookmarks and the invitation email survive.
       { path: "account",      element: <Navigate to="/settings/account" replace />      },

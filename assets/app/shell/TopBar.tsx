@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { ChevronDown, LogOut, Settings as SettingsIcon, User as UserIcon } from "lucide-react";
+import { ChevronDown, CircleHelp, LogOut, Settings as SettingsIcon, User as UserIcon } from "lucide-react";
 import { navEntryFor } from "../lib/nav";
+import { helpUrlFor } from "../lib/help";
 import ThemeToggle from "./ThemeToggle";
 import { useAuth } from "../lib/auth";
 import { roleLabel } from "../lib/roles";
@@ -42,6 +43,19 @@ export default function TopBar() {
         <p className="text-xs font-mono text-muted-foreground mt-0.5">{sub}</p>
       </div>
       <div className="flex items-center gap-3">
+        {/* Help for whatever page you are on. The articles are server-rendered
+            outside this SPA, so this is a real link, opened in a new tab to
+            keep any half-finished form on this page intact. */}
+        <a
+          href={helpUrlFor(pathname)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Help for this page"
+          aria-label="Help for this page"
+          className="flex items-center justify-center w-7 h-7 rounded text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          <CircleHelp size={15} />
+        </a>
         <ThemeToggle />
         <div ref={menuRef} className="relative">
           <button

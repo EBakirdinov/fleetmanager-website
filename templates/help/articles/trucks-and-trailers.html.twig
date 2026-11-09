@@ -1,0 +1,86 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        Equipment records are the most detailed in the app — roughly forty-five fields on a truck
+        and fifty on a trailer. You do not need all of them on day one, but a few quietly drive
+        behaviour elsewhere, and those are worth filling in properly.
+    </p>
+
+    <h2>Trucks</h2>
+    <h3>Identity</h3>
+    <ul>
+        <li><strong>Unit number</strong>, <strong>VIN</strong>, make, model and year. Makes and models come from the NHTSA vPIC catalog rather than free text, so they stay consistent across the fleet.</li>
+        <li><strong>Plate number, state and expiration.</strong></li>
+        <li>Colour, cab type, sleeper size, bed count.</li>
+    </ul>
+
+    <h3>Drivetrain</h3>
+    <ul>
+        <li>Engine type and number, fuel type, transmission, axle count.</li>
+        <li><strong>GVWR</strong> and fuel capacity.</li>
+    </ul>
+
+    <h3>Readings</h3>
+    <ul>
+        <li><strong>Current mileage</strong> and <strong>engine hours.</strong></li>
+        <li><strong>Current location</strong>, from the ELD.</li>
+    </ul>
+    <p>
+        If an ELD is connected these update themselves. Odometer in particular is worth getting
+        right: it is what <a href="{{ path('help_article', { slug: 'maintenance' }) }}">mileage-based
+        service intervals</a> measure against, and a stale reading means a PM that never comes due.
+    </p>
+
+    <h3>Inspections</h3>
+    <p>
+        A truck carries a <strong>federal annual inspection</strong> and a <strong>state
+        inspection</strong>, each with a date and a slot for the certificate itself. There is also
+        a slot for an exterior photo, which is more useful than it sounds when you are describing
+        a truck to a broker or a shop.
+    </p>
+
+    <h2>Trailers</h2>
+    <h3>The fields that do work</h3>
+    <p>These feed <a href="{{ path('help_article', { slug: 'assigning-drivers' }) }}">driver suggestions</a>, so blanks here cost you:</p>
+    <ul>
+        <li><strong>Type</strong> — dry van, reefer, flatbed, step deck, lowboy, curtain side or tanker.</li>
+        <li><strong>Payload capacity</strong> — checked against load weight.</li>
+        <li><strong>Equipment flags</strong> — air-ride suspension, sliding tandem, ventilation, ABS brakes, E-track, liftgate, Thermo King unit and <strong>hazmat certified</strong>.</li>
+    </ul>
+
+    <h3>The rest</h3>
+    <ul>
+        <li>Dimensions — length, width, height, axle count, tyre size and count.</li>
+        <li>Weights — GVWR, tare weight, payload capacity.</li>
+        <li>Construction — door, roof and floor type, side and front materials.</li>
+        <li>Odometer, purchase date and price, home location, notes.</li>
+        <li>Federal and state inspection dates, with certificate slots.</li>
+    </ul>
+
+    <h2>How equipment reaches a load</h2>
+    <p>
+        A trailer is assigned to a truck, and a truck to a driver. When you put a driver on a
+        <a href="{{ path('help_article', { slug: 'loads' }) }}">load</a>, the truck and trailer
+        come with them. There is no truck field on the load itself.
+    </p>
+    <p>
+        So to change the equipment on a run, change the assignment on the truck — swap which
+        trailer it is pulling, or which driver is in it. The chain is:
+    </p>
+    <p><code>driver → assigned truck → assigned trailer</code></p>
+
+    <div class="note">
+        <p>Both trucks and trailers have an <strong>available</strong> view — equipment with no driver
+        or no truck currently attached. It is the fastest way to find the gap when a driver is
+        showing up with no rig.</p>
+    </div>
+
+    <h2>Imported equipment</h2>
+    <p>
+        Trucks imported from an ELD are marked with the provider they came from. That marking is
+        what stops a second provider adopting them and what lets the app tell you exactly how much
+        equipment an ELD owns before you disconnect it. Trailers are never imported — no ELD
+        reports them — so that roster is always yours to maintain.
+    </p>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends 'help/article.html.twig' %}
+
+{% block body %}
+    <p>
+        When you need a driver for a load, the app ranks your drivers against it and tells you
+        <em>why</em> each one sits where they do. It never hides a driver behind a score you
+        cannot interrogate — every candidate comes back with three lists.
+    </p>
+
+    <h2>Blockers, warnings and matches</h2>
+    <ul>
+        <li>
+            <strong>Blockers</strong> are hard stops. A hazmat load and a driver without the
+            endorsement; freight heavier than their trailer's payload capacity; a driver already
+            committed on those dates. A driver with a blocker is not eligible.
+        </li>
+        <li>
+            <strong>Warnings</strong> are things you may knowingly accept. The truck's last known
+            position is a long way from the pickup, or the position is stale enough that the app
+            will not vouch for it.
+        </li>
+        <li>
+            <strong>Matches</strong> are the positive reasons. The right trailer type, temperature
+            control for a reefer load, E-track for securement, close to the pickup.
+        </li>
+    </ul>
+
+    <div class="note">
+        <p>Read the blockers before you override anything. "Not eligible" almost always traces back
+        to a field nobody filled in — an endorsement left unchecked, or a trailer with no payload
+        capacity — rather than to a driver who genuinely cannot take the work.</p>
+    </div>
+
+    <h2>What it checks</h2>
+    <div class="help-scroll">
+        <table>
+            <thead>
+                <tr><th>Checked</th><th>Against</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Hazmat and tanker endorsements</td><td>The load's hazmat flag and commodity</td></tr>
+                <tr><td>Trailer type</td><td>The trailer type the load needs</td></tr>
+                <tr><td>Payload capacity</td><td>The load's weight</td></tr>
+                <tr><td>Temperature control</td><td>Whether the load sets a temperature</td></tr>
+                <tr><td>Securement — E-track, straps, load bars</td><td>The load's securement requirements</td></tr>
+                <tr><td>Distance from the pickup</td><td>The truck's last reported GPS position</td></tr>
+                <tr><td>Date conflicts</td><td>Loads that driver is already on</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h2>Stale positions</h2>
+    <p>
+        Proximity is only as good as the last position the ELD reported. If a truck has not
+        reported recently, the app says so rather than quietly treating an old position as
+        current — a truck that was near the pickup this morning may be three hundred miles away
+        now. Treat a stale-position warning as "confirm with the driver", not as a reason to skip
+        them.
+    </p>
+
+    <h2>Strict mode</h2>
+    <p>
+        By default you see everyone, ranked, blockers and all, so you can make the call. Strict
+        mode hides anyone with a blocker. Use the default when you are short of drivers and need
+        to see who is <em>nearly</em> right; use strict when you have plenty and only want clean
+        options.
+    </p>
+
+    <h2>If nobody is suggested</h2>
+    <p>Work through these in order — it is nearly always one of them:</p>
+    <ol>
+        <li><strong>Drivers have no assigned truck.</strong> A driver with no truck has no trailer and no position, so almost everything fails. Fix it on the <a href="{{ path('help_article', { slug: 'trucks-and-trailers' }) }}">truck record</a>.</li>
+        <li><strong>Trailer records are incomplete.</strong> No payload capacity means the weight check cannot pass.</li>
+        <li><strong>Endorsements were never ticked.</strong> Common right after an ELD import — it brings licence numbers, not endorsement flags.</li>
+        <li><strong>Driver status.</strong> Only active drivers are offered. Someone on leave or off duty will not appear.</li>
+    </ol>
+{% endblock %}

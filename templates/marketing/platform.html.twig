@@ -1,0 +1,820 @@
+{#
+  The public product page. Deliberately standalone rather than
+  {% extends 'base.html.twig' %}: that shell has no block around <div id="root">
+  or around its vite script tag, so extending it would force the entire React
+  bundle — and its `#root { overflow: hidden }` rule, which makes a long page
+  unscrollable — onto a page that needs neither.
+
+  Everything claimed here is backed by code in the API. When a feature moves
+  from the roadmap list at the bottom into the product, move the copy with it;
+  do not let the two drift.
+#}
+{% from 'marketing/_icons.html.twig' import icon %}
+
+{% set canonical   = url('marketing_platform') %}
+{% set page_title  = 'Dispatch, fleet and cost software for carriers — Fleet Pro' %}
+{% set page_desc   = 'Fleet Pro runs dispatch, driver and equipment records, preventive maintenance and cost tracking for small and mid-size trucking companies. Connects to your ELD and fuel card.' %}
+
+{# Flip this to path('marketing_demo_request') the moment a POST handler exists.
+   That one change points the form at the endpoint and removes the "nothing was
+   sent" notice, the noscript fallback and the inline script in one go. #}
+{% set demo_endpoint = null %}
+
+{% set nav_links = {
+    '#tour':         'What it does',
+    '#integrations': 'Integrations',
+    '#access':       'Access control',
+    '#faq':          'FAQ',
+} %}
+
+{% set container = 'mx-auto w-full max-w-6xl px-5 sm:px-8' %}
+{% set kicker    = 'text-xs font-mono uppercase tracking-widest text-muted-foreground' %}
+{% set h2        = 'text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight leading-[1.15] text-balance' %}
+{% set lead      = 'mt-4 max-w-[62ch] text-base sm:text-lg leading-relaxed text-pretty text-muted-foreground' %}
+{% set section   = 'border-t border-border py-16 sm:py-24' %}
+<!doctype html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ page_desc }}">
+    <link rel="canonical" href="{{ canonical }}">
+    <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Fleet Pro">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:url" content="{{ canonical }}">
+    <meta property="og:title" content="Dispatch, fleet and cost software for carriers">
+    <meta property="og:description" content="{{ page_desc }}">
+
+    {# summary, not summary_large_image: there is no 1200x630 image yet, and the
+       large card renders broken without one. Switch both when the image exists. #}
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Dispatch, fleet and cost software for carriers">
+    <meta name="twitter:description" content="{{ page_desc }}">
+
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="alternate icon" href="{{ asset('favicon.ico') }}" sizes="32x32">
+    <meta name="theme-color" content="#f0f2f6" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)">
+
+    {% include 'partials/_theme_boot.html.twig' %}
+    {{ vite_entry_link_tags('site') }}
+
+    <style>
+        /* Paints the right ground before the stylesheet lands — in dev it
+           arrives via JS, in prod it is a blocking <link>, and both benefit.
+           Values mirror --background in assets/styles/theme.css.
+
+           color-scheme is the load-bearing one: it is what stops Chrome from
+           painting its pale-yellow autofill background behind the demo form's
+           inputs on a near-black page. The SPA never needs it because the SPA
+           has no native form controls. */
+        html { background: #f0f2f6; color-scheme: light; scroll-behavior: smooth; }
+        html.dark { background: #0b0f14; color-scheme: dark; }
+        @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    </style>
+</head>
+<body class="min-h-screen bg-background text-foreground antialiased">
+
+<a href="#tour" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:ring-2 focus:ring-ring">Skip to content</a>
+
+<header class="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur-sm">
+    <div class="{{ container }} flex h-14 items-center justify-between gap-4">
+        <a href="{{ canonical }}" class="flex items-center gap-2.5" aria-label="Fleet Pro home">
+            {# The mark the app composes inline in Sidebar.tsx and Login.tsx:
+               an amber square holding the truck glyph. There is no logo file. #}
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary text-black">
+                {{ icon('truck', 15) }}
+            </span>
+            <span class="text-sm font-bold uppercase tracking-tight">Fleet Pro</span>
+        </a>
+
+        <nav class="hidden items-center gap-6 md:flex" aria-label="Page sections">
+            {% for href, label in nav_links %}
+                <a href="{{ href }}" class="text-sm text-muted-foreground transition-colors hover:text-foreground">{{ label }}</a>
+            {% endfor %}
+        </nav>
+
+        <div class="flex items-center gap-3">
+            {# Sign in is for existing customers and gives way on a phone; the
+               demo CTA is what this page exists for, so it always shows. #}
+            <a href="/login" class="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-block">Sign in</a>
+            <a href="#demo" class="rounded bg-primary px-3.5 py-1.5 text-sm font-medium text-black transition-opacity hover:opacity-90">
+                Request a demo
+            </a>
+        </div>
+    </div>
+</header>
+
+<main>
+    <section class="{{ container }} pt-16 pb-14 sm:pt-24 sm:pb-20">
+        <p class="{{ kicker }}">Fleet software for carriers</p>
+        <h1 class="mt-4 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-tight text-balance sm:text-5xl lg:text-6xl">
+            The back office your trucking company actually runs on.
+        </h1>
+        <p class="mt-6 max-w-[58ch] text-lg leading-relaxed text-pretty text-muted-foreground sm:text-xl">
+            Dispatch, driver and equipment records, preventive maintenance and every dollar the
+            fleet spends — in one place. Build a load, send it to the driver, watch the truck
+            move, and know what the run actually cost. No spreadsheet in the loop.
+        </p>
+
+        <div class="mt-9 flex flex-wrap items-center gap-4">
+            <a href="#demo" class="inline-flex items-center gap-2 rounded bg-primary px-5 py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-90">
+                Request a demo {{ icon('arrow-right', 16) }}
+            </a>
+            <a href="#tour" class="inline-flex items-center gap-2 rounded border border-border px-5 py-2.5 text-sm font-medium transition-colors hover:bg-card">
+                See what it does
+            </a>
+        </div>
+
+        {# Stat strip. Stands in for the product screenshot a page like this
+           usually leads with — the mono numerals are the same device the app's
+           KpiCard uses, so it reads as the product rather than as an ad. #}
+        <dl class="mt-14 grid grid-cols-2 gap-x-6 gap-y-8 border-t border-border pt-10 sm:grid-cols-4">
+            {% for stat in [
+                { value: '3',    label: 'ELD providers supported' },
+                { value: '11',   label: 'Rate & cost line types' },
+                { value: '160+', label: 'Named permissions' },
+                { value: '4',    label: 'Roles, before you customise' },
+            ] %}
+                <div>
+                    <dt class="sr-only">{{ stat.label }}</dt>
+                    <dd>
+                        <span class="block font-mono text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">{{ stat.value }}</span>
+                        <span class="mt-2 block text-xs font-mono uppercase tracking-widest text-muted-foreground">{{ stat.label }}</span>
+                    </dd>
+                </div>
+            {% endfor %}
+        </dl>
+    </section>
+
+    <section class="{{ section }}">
+        <div class="{{ container }}">
+            <p class="{{ kicker }}">Who it's for</p>
+            <h2 class="mt-3 {{ h2 }}">Built for the fleet that has outgrown its spreadsheet.</h2>
+
+            <div class="mt-10 grid gap-8 sm:grid-cols-3 sm:gap-10">
+                {% for audience in [
+                    {
+                        icon: 'truck',
+                        title: 'Owner-operators adding trucks',
+                        body: 'You started with one truck and a folder of rate confirmations. At three or four, you stop being able to remember which load paid what, and which trailer is due for inspection.',
+                    },
+                    {
+                        icon: 'building-2',
+                        title: 'Fleets of five to fifty',
+                        body: 'Big enough that dispatch, maintenance and the books are different jobs, small enough that buying three systems to connect them is absurd.',
+                    },
+                    {
+                        icon: 'key-round',
+                        title: 'Teams that need separation of duties',
+                        body: 'Your dispatcher should book loads without seeing the rate. Your office manager should not see a driver\'s SSN. That is a permission setting here, not a conversation.',
+                    },
+                ] %}
+                    <div>
+                        <span class="inline-flex h-9 w-9 items-center justify-center rounded bg-primary/10 text-primary">
+                            {{ icon(audience.icon, 18) }}
+                        </span>
+                        <h3 class="mt-4 text-base font-medium leading-snug">{{ audience.title }}</h3>
+                        <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ audience.body }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <p class="mt-10 max-w-[62ch] rounded border border-border bg-card p-4 text-sm leading-relaxed text-muted-foreground">
+                <span class="font-medium text-foreground">An honest ceiling:</span> this is built for fleets up to
+                roughly a hundred trucks. Several screens load the whole roster at once, which is
+                instant at fifty units and would not be at two thousand. If you are bigger than
+                that, talk to us before you buy.
+            </p>
+        </div>
+    </section>
+
+    <section id="tour" class="{{ section }} scroll-mt-14">
+        <div class="{{ container }}">
+            <p class="{{ kicker }}">What it does</p>
+            <h2 class="mt-3 {{ h2 }}">Eight things, done properly.</h2>
+            <p class="{{ lead }}">
+                Not a suite of half-finished modules. These are the parts that are built, in
+                production, and detailed enough to replace the spreadsheet they're competing with.
+            </p>
+
+            {# gap-px over bg-border with bg-card cells. --border is 7-8% alpha,
+               which is close to invisible as a 1px outline but reads cleanly as
+               a 1px fill — and identically in both themes. #}
+            <div class="mt-10 grid gap-px overflow-hidden rounded-md bg-border sm:grid-cols-2">
+                {% for card in [
+                    {
+                        icon: 'package', kicker: 'Dispatch',
+                        title: 'Loads and dispatch',
+                        body: 'A load is a sequence of stops, not a from-and-to. Every pickup and delivery carries its own appointment window, facility contact, reference number and instructions.',
+                        specs: [
+                            'Multi-stop pickups and deliveries',
+                            'Appointment or first-come-first-served windows',
+                            'Hazmat, reefer temperature, weight, pallets, seal, securement',
+                            'Proof of delivery required, per stop',
+                            'Eleven rate and cost line types — line haul, detention, layover, TONU, fuel surcharge, tolls',
+                            'Revenue, cost and profit on every load',
+                            'Driver instructions, broker notes and internal comments kept apart',
+                        ],
+                    },
+                    {
+                        icon: 'send', kicker: 'Driver comms',
+                        title: 'Send it to the driver',
+                        body: 'One action emails and texts the assigned driver with the rate confirmation attached as a PDF. Each channel reports its own result, so an email that landed is never hidden by a text that failed.',
+                        specs: [
+                            'Email and SMS, independently',
+                            'Rate confirmation generated as a PDF on request',
+                            'Up to five extra attachments, 8 MB each',
+                            'Sent from your SendGrid account and your Twilio number',
+                            'The driver sees your company, not ours',
+                        ],
+                    },
+                    {
+                        icon: 'user-check', kicker: 'Assignment',
+                        title: 'Who can actually take this load',
+                        body: 'Ask, and get a ranked answer that explains itself. Every candidate comes back with what blocks them, what you should watch, and what genuinely matches.',
+                        specs: [
+                            'Hazmat and tanker endorsement checks',
+                            'Trailer type and payload capacity',
+                            'E-track, temperature control, securement',
+                            'GPS proximity, with stale positions flagged as stale',
+                            'Conflicts with the dates they are already committed to',
+                            'Blockers, warnings and matches — not a mystery score',
+                        ],
+                    },
+                    {
+                        icon: 'route', kicker: 'Routing',
+                        title: 'Live fleet and route math',
+                        body: 'Positions come from your ELD; miles come from the route. Deadhead is measured separately from loaded miles, because the two are not the same money.',
+                        specs: [
+                            'Live truck positions, refreshed from the ELD',
+                            'Loaded miles and empty miles, counted separately',
+                            'Drive time and ETA for each stop',
+                            'Address autocomplete and geocoding',
+                            'Four-day weather per stop, including the appointment window',
+                            'Measured road miles with Google Routes connected — a straight-line estimate otherwise, labelled as an estimate',
+                        ],
+                    },
+                    {
+                        icon: 'users', kicker: 'People',
+                        title: 'Driver records',
+                        body: 'The paperwork that stops a truck at a scale house, in fields you can search and sort. An expiration date is a date here, not a note someone typed in a comment box.',
+                        specs: [
+                            'CDL type, number, state and expiration',
+                            'Medical certificate number and expiration',
+                            'Six endorsements, each its own flag',
+                            'Company driver, owner-operator or lease',
+                            'Six document slots — licence front and back, medical certificate, SSN card, proof of address',
+                            'Thumbnails generated on upload',
+                        ],
+                    },
+                    {
+                        icon: 'truck', kicker: 'Equipment',
+                        title: 'Trucks and trailers',
+                        body: 'Around forty-five fields on a truck and fifty on a trailer, because the one you need is always the one a simpler system left out.',
+                        specs: [
+                            'VIN, plate number, plate state and expiration',
+                            'Engine, fuel type, transmission, axle count, GVWR',
+                            'Odometer and engine hours, fed by the ELD',
+                            'Federal and state inspection certificates on file',
+                            'Trailer dimensions, construction, tare and payload capacity',
+                            'Eight trailer equipment flags, hazmat certification and Thermo King among them',
+                            'Makes and models from the NHTSA vPIC catalog',
+                        ],
+                    },
+                    {
+                        icon: 'wrench', kicker: 'Maintenance',
+                        title: 'Preventive maintenance that knows the odometer',
+                        body: 'Set the interval once for the fleet and override it on the trucks that need it. Overdue is computed against the mileage your ELD reported this morning — not a flag someone forgot to clear.',
+                        specs: [
+                            'Fleet-wide intervals, overridden per truck',
+                            'Miles or days, whichever comes first',
+                            'On track, due soon or overdue, worked out on read',
+                            'Service records, repair orders and estimates',
+                            'Thirteen service types',
+                            'Spend by shop, with open estimates called out',
+                            'Every invoice lands on the expense ledger by itself',
+                        ],
+                    },
+                    {
+                        icon: 'receipt', kicker: 'Cost',
+                        title: 'One ledger for every dollar',
+                        body: 'Typed in or imported from a fuel card, it goes to the same place. Receipts are stored exactly as uploaded — re-encoding evidence loses the detail somebody later needs to read.',
+                        specs: [
+                            'Eleven categories, nine payment methods',
+                            'Receipts kept byte-for-byte: JPG, PNG, PDF, WebP, HEIC',
+                            'Unverified, verified or flagged',
+                            'Billable flag, attributed to a truck, driver or load',
+                            'Fuel detail — gallons, price per gallon, retail price, savings',
+                            'Search across description, vendor, card last four and notes',
+                            'Totals by category and by vendor',
+                        ],
+                    },
+                ] %}
+                    <article class="bg-card p-6 sm:p-7">
+                        <div class="flex items-center gap-3">
+                            <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
+                                {{ icon(card.icon, 18) }}
+                            </span>
+                            <p class="{{ kicker }}">{{ card.kicker }}</p>
+                        </div>
+                        <h3 class="mt-4 text-base font-medium leading-snug">{{ card.title }}</h3>
+                        <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ card.body }}</p>
+                        <ul class="mt-5 space-y-2 border-t border-border pt-5">
+                            {% for spec in card.specs %}
+                                <li class="flex gap-2.5">
+                                    <span class="mt-px shrink-0 text-primary">{{ icon('check', 13, '', 2.5) }}</span>
+                                    <span class="text-xs font-mono leading-relaxed text-muted-foreground">{{ spec }}</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </article>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section id="integrations" class="{{ section }} scroll-mt-14">
+        <div class="{{ container }}">
+            <p class="{{ kicker }}">Integrations</p>
+            <h2 class="mt-3 {{ h2 }}">Connects to what you already pay for.</h2>
+            <p class="{{ lead }}">
+                You bring your own keys and they are encrypted at rest. Every connection has a
+                live test button, so you find out it works while you're setting it up rather than
+                when a driver doesn't get their load.
+            </p>
+
+            <div class="mt-10 grid gap-px overflow-hidden rounded-md bg-border sm:grid-cols-2 lg:grid-cols-3">
+                {% for integration in [
+                    {
+                        icon: 'gauge', type: 'ELD',
+                        names: 'Quantum ELD · TrackPro ELD · MAX ELD',
+                        body: 'Import your truck and driver roster, and see what the import will create, link, refresh and retire before it commits to anything. Live GPS feeds the map and the maintenance odometer.',
+                    },
+                    {
+                        icon: 'plug', type: 'Fuel card',
+                        names: 'Mudflap',
+                        body: 'Fuel purchases arrive on the ledger hourly, with gallons, price per gallon and the card discount. Fuel cards re-price rows after the fact, so a trailing window is re-read every run.',
+                    },
+                    {
+                        icon: 'map-pin', type: 'Maps',
+                        names: 'Google Maps',
+                        body: 'Geocoding, address autocomplete and road distance, each switched on independently. With Routes off, mileage falls back to a straight line and says so.',
+                    },
+                    {
+                        icon: 'mail', type: 'Email',
+                        names: 'SendGrid',
+                        body: 'Load confirmations go out through your own account, from your own domain. Your driver sees a message from your company.',
+                    },
+                    {
+                        icon: 'message-square', type: 'SMS',
+                        names: 'Twilio',
+                        body: 'Load details by text from your own number, so a reply reaches you. Capped at 320 characters.',
+                    },
+                    {
+                        icon: 'cloud-sun', type: 'Weather',
+                        names: 'Open-Meteo',
+                        body: 'A four-day outlook on every stop, and the conditions inside the appointment window. No account and no API key needed.',
+                    },
+                ] %}
+                    <article class="bg-card p-6">
+                        <div class="flex items-center gap-2.5">
+                            <span class="shrink-0 text-muted-foreground">{{ icon(integration.icon, 15) }}</span>
+                            <p class="{{ kicker }}">{{ integration.type }}</p>
+                        </div>
+                        <h3 class="mt-3 text-base font-medium leading-snug">{{ integration.names }}</h3>
+                        <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ integration.body }}</p>
+                    </article>
+                {% endfor %}
+            </div>
+
+            <p class="mt-8 max-w-[62ch] text-sm leading-relaxed text-muted-foreground">
+                One ELD per company, by design — two providers both claiming the same truck is a
+                data problem, not a feature. Switching is a deliberate act: before it releases
+                anything, the app tells you exactly how many trucks and drivers the outgoing
+                provider owns.
+            </p>
+        </div>
+    </section>
+
+    <section id="access" class="{{ section }} scroll-mt-14">
+        <div class="{{ container }}">
+            <p class="{{ kicker }}">Access control</p>
+            <h2 class="mt-3 {{ h2 }}">Your dispatcher can book a load without seeing what it pays.</h2>
+            <p class="{{ lead }}">
+                Most fleet software gives you three roles and hopes. This one has around a hundred
+                and sixty named permissions, and you can grant or revoke any single one for any
+                single person without inventing a new role for them.
+            </p>
+
+            <div class="mt-10 grid gap-8 lg:grid-cols-3 lg:gap-10">
+                <div class="lg:col-span-2">
+                    <div class="overflow-x-auto rounded-md border border-border">
+                        <table class="w-full border-collapse text-sm">
+                            <caption class="sr-only">Default access level for each office role, by module</caption>
+                            <thead>
+                                <tr class="bg-card">
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-mono uppercase tracking-widest text-muted-foreground">Module</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-mono uppercase tracking-widest text-muted-foreground">Administrator</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-mono uppercase tracking-widest text-muted-foreground">Ops&nbsp;manager</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-mono uppercase tracking-widest text-muted-foreground">Dispatcher</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {# Straight out of App\Security\Permission\RolePresets in
+                                   the API. Only modules that actually have endpoints are
+                                   listed. A module missing from a role's preset is No
+                                   Access, which hides the page rather than refusing it. #}
+                                {% for row in [
+                                    { module: 'Loads and dispatch', admin: 'Full',   manager: 'Manage', dispatcher: 'Manage' },
+                                    { module: 'Drivers',            admin: 'Full',   manager: 'Manage', dispatcher: 'View'   },
+                                    { module: 'Trucks',             admin: 'Full',   manager: 'Manage', dispatcher: 'View'   },
+                                    { module: 'Trailers',           admin: 'Full',   manager: 'Manage', dispatcher: 'View'   },
+                                    { module: 'Maintenance',        admin: 'Full',   manager: 'Manage', dispatcher: 'View'   },
+                                    { module: 'Expenses',           admin: 'Full',   manager: 'Manage', dispatcher: 'View'   },
+                                    { module: 'Users and access',   admin: 'Full',   manager: 'None',   dispatcher: 'None'   },
+                                    { module: 'Company settings',   admin: 'Full',   manager: 'View',   dispatcher: 'None'   },
+                                    { module: 'Integrations',       admin: 'Full',   manager: 'None',   dispatcher: 'None'   },
+                                ] %}
+                                    <tr class="border-t border-border">
+                                        <th scope="row" class="px-4 py-3 text-left font-normal">{{ row.module }}</th>
+                                        {% for level in [row.admin, row.manager, row.dispatcher] %}
+                                            <td class="px-4 py-3">
+                                                {% if level == 'None' %}
+                                                    <span class="font-mono text-xs text-muted-foreground">Hidden</span>
+                                                {% else %}
+                                                    <span class="font-mono text-xs {{ level == 'Full' ? 'text-primary' : 'text-foreground' }}">{{ level }}</span>
+                                                {% endif %}
+                                            </td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="mt-3 text-xs font-mono leading-relaxed text-muted-foreground">
+                        Defaults, not limits. The Dispatcher row ships with load rates visible and
+                        profit hidden; both are individual permissions you can flip per person.
+                    </p>
+                </div>
+
+                <div class="space-y-6">
+                    {% for point in [
+                        {
+                            icon: 'lock',
+                            title: 'Hidden means absent',
+                            body: 'When someone lacks permission for a field, it is left out of the API response rather than blanked in the browser. A dispatcher who opens developer tools still cannot read a rate, an SSN or a driver\'s pay.',
+                        },
+                        {
+                            icon: 'key-round',
+                            title: 'Per-person, not per-role',
+                            body: 'Give one operations manager the right to see SSNs and nobody else. Revoke delete from one dispatcher. Neither needs a new role, and neither can edit their own permissions.',
+                        },
+                        {
+                            icon: 'shield-check',
+                            title: 'No access hides the page',
+                            body: 'A module someone has no access to disappears from their navigation. They are not offered a door that will not open.',
+                        },
+                    ] %}
+                        <div>
+                            <div class="flex items-center gap-2.5">
+                                <span class="shrink-0 text-primary">{{ icon(point.icon, 16) }}</span>
+                                <h3 class="text-base font-medium leading-snug">{{ point.title }}</h3>
+                            </div>
+                            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ point.body }}</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="{{ section }}">
+        <div class="{{ container }}">
+            <p class="{{ kicker }}">Your data</p>
+            <h2 class="mt-3 {{ h2 }}">Separated, logged, and reachable.</h2>
+
+            <div class="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4 sm:gap-10">
+                {% for item in [
+                    {
+                        icon: 'shield-check',
+                        title: 'One company cannot see another',
+                        body: 'Every record belongs to a company, and asking for a record outside yours returns "not found" rather than "forbidden" — the API will not even confirm that the ID exists.',
+                    },
+                    {
+                        icon: 'lock',
+                        title: 'Your keys, encrypted',
+                        body: 'ELD, fuel card, Google, SendGrid and Twilio credentials are yours, stored encrypted, and used only for your company\'s requests.',
+                    },
+                    {
+                        icon: 'clock',
+                        title: 'Field-level history',
+                        body: 'Changes to drivers, loads, trucks, trailers, users and the company are versioned field by field, with who made them. Useful on the day somebody blanks a column.',
+                    },
+                    {
+                        icon: 'code',
+                        title: 'A documented API',
+                        body: 'The app is a client of a REST API with a published OpenAPI spec and a Swagger browser. Anything you can see in the app, you can read programmatically.',
+                    },
+                ] %}
+                    <div>
+                        <span class="inline-flex h-9 w-9 items-center justify-center rounded bg-primary/10 text-primary">
+                            {{ icon(item.icon, 18) }}
+                        </span>
+                        <h3 class="mt-4 text-base font-medium leading-snug">{{ item.title }}</h3>
+                        <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ item.body }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="{{ section }}">
+        <div class="{{ container }}">
+            <p class="{{ kicker }}">Not here yet</p>
+            <h2 class="mt-3 {{ h2 }}">What we haven't built.</h2>
+            <p class="{{ lead }}">
+                You have probably been shown a demo of something that did not exist. Here is the
+                list of things this platform does not do today, so you can decide with it in front
+                of you rather than find out in month two.
+            </p>
+
+            <ul class="mt-9 grid max-w-4xl gap-x-10 gap-y-3 sm:grid-cols-2">
+                {% for gap in [
+                    'Invoicing, accounts receivable and payment recording',
+                    'Driver settlements and payroll',
+                    'Accounting integrations — no QuickBooks or Xero',
+                    'Hours-of-service logs and DVIR, even where the ELD has them',
+                    'A general document library with approval workflow',
+                    'CSV or Excel exports',
+                    'Load board integrations — no DAT or Truckstop',
+                    'Fuel cards other than Mudflap',
+                    'A driver mobile app or driver portal',
+                    'Dashboard charts and a reporting module',
+                ] %}
+                    <li class="flex gap-2.5 border-t border-border pt-3">
+                        <span class="mt-0.5 shrink-0 text-muted-foreground">{{ icon('circle-alert', 14) }}</span>
+                        <span class="text-sm leading-relaxed text-muted-foreground">{{ gap }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+
+            <p class="mt-8 max-w-[62ch] text-sm leading-relaxed text-muted-foreground">
+                The Driver role is fully specified in the permission model and waiting on that
+                portal. Until it ships, Fleet Pro is an office application — your drivers receive
+                their loads by email and text.
+            </p>
+        </div>
+    </section>
+
+    <section id="faq" class="{{ section }} scroll-mt-14">
+        <div class="{{ container }}">
+            <p class="{{ kicker }}">Questions</p>
+            <h2 class="mt-3 {{ h2 }}">The ones we get asked.</h2>
+
+            <div class="mt-10 max-w-3xl divide-y divide-border border-t border-b border-border">
+                {% for qa in [
+                    {
+                        q: 'What size fleet is this built for?',
+                        a: 'Five to fifty trucks is the sweet spot, and it works fine for one. Up to about a hundred is comfortable. Past that, some screens load the entire roster in one request and you would feel it — tell us your size and we will be straight with you.',
+                    },
+                    {
+                        q: 'Which ELDs do you support?',
+                        a: 'Quantum ELD, TrackPro ELD and MAX ELD. Each one imports your trucks and drivers and feeds live positions and odometer readings. If yours is not on the list, ask — on our side a new provider is one client class, not a rebuild.',
+                    },
+                    {
+                        q: 'Can I use it without an ELD?',
+                        a: 'Yes, and nothing is locked. You type odometer readings in yourself, and you go without the live map and without maintenance intervals that track mileage automatically. Everything else is unchanged.',
+                    },
+                    {
+                        q: 'How does pricing work?',
+                        a: 'Talk to us. It depends on how many trucks you run and which integrations you need, and a number published here would be wrong for most of the fleets reading it.',
+                    },
+                    {
+                        q: 'Can my dispatcher see what a load pays?',
+                        a: 'That is your call, per person. Rate, rate-per-mile, cost and profit are four separate permissions. The Dispatcher role ships able to see the rate but not the profit, and you can change either. A field someone cannot see is not sent to their browser at all.',
+                    },
+                    {
+                        q: 'Is my data separated from other companies?',
+                        a: 'Every record belongs to one company, enforced on reads and writes both. A request for another company\'s record returns "not found" — the API does not confirm the record exists. Your integration keys are encrypted at rest and used only for your requests.',
+                    },
+                    {
+                        q: 'Can I get my data out?',
+                        a: 'Through the API, yes — it is documented with an OpenAPI spec and anything visible in the app is readable through it. There are no CSV or Excel export buttons yet; that is on the list above, and we would rather you knew.',
+                    },
+                    {
+                        q: 'How long does setup take?',
+                        a: 'An afternoon. Connecting your ELD imports the trucks and drivers, and it shows you exactly what it will create, link or retire before it commits. The rest is your own data entry.',
+                    },
+                ] %}
+                    <details class="group py-5">
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium leading-snug">
+                            {{ qa.q }}
+                            <span class="shrink-0 text-muted-foreground transition-transform group-open:rotate-180">{{ icon('chevron-down', 18) }}</span>
+                        </summary>
+                        <p class="mt-3 max-w-[62ch] text-sm leading-relaxed text-muted-foreground">{{ qa.a }}</p>
+                    </details>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    {% set label_cls = 'block text-xs font-mono font-medium uppercase tracking-widest text-muted-foreground' %}
+    {% set input_cls = 'w-full rounded border border-border bg-input-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring' %}
+
+    <section id="demo" class="{{ section }} scroll-mt-14">
+        <div class="{{ container }}">
+            <div class="grid gap-10 lg:grid-cols-2 lg:gap-16">
+                <div>
+                    <p class="{{ kicker }}">Get in touch</p>
+                    <h2 class="mt-3 {{ h2 }}">See it on your own loads.</h2>
+                    <p class="{{ lead }}">
+                        Tell us how many trucks you run and what is currently held together with a
+                        spreadsheet. We will walk you through the parts that matter to you and
+                        skip the rest.
+                    </p>
+                    <ul class="mt-8 space-y-3">
+                        {% for promise in [
+                            'A real screen share, not a slide deck',
+                            'We will tell you if you are too big or too small for it',
+                            'No obligation, and no drip campaign afterwards',
+                        ] %}
+                            <li class="flex gap-2.5">
+                                <span class="mt-0.5 shrink-0 text-primary">{{ icon('check', 14, '', 2.5) }}</span>
+                                <span class="text-sm leading-relaxed text-muted-foreground">{{ promise }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <form id="demo-form" method="post" action="{{ demo_endpoint ?? '' }}" class="grid gap-4 sm:grid-cols-2">
+                    <div class="space-y-1.5">
+                        <label for="demo-name" class="{{ label_cls }}">Your name</label>
+                        <input id="demo-name" name="name" type="text" required
+                               autocomplete="name" autocapitalize="words" spellcheck="false"
+                               class="{{ input_cls }}" placeholder="Sam Reyes">
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label for="demo-company" class="{{ label_cls }}">Company</label>
+                        <input id="demo-company" name="company" type="text" required
+                               autocomplete="organization" autocapitalize="words"
+                               class="{{ input_cls }}" placeholder="Reyes Transport LLC">
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label for="demo-fleet-size" class="{{ label_cls }}">Trucks in service</label>
+                        <select id="demo-fleet-size" name="fleet_size" required class="{{ input_cls }}">
+                            <option value="">Select…</option>
+                            {% for band in ['1–5', '6–20', '21–50', '51+'] %}
+                                <option value="{{ band }}">{{ band }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label for="demo-email" class="{{ label_cls }}">Work email</label>
+                        <input id="demo-email" name="email" type="email" required
+                               autocomplete="email" inputmode="email"
+                               autocapitalize="off" autocorrect="off" spellcheck="false"
+                               class="{{ input_cls }}" placeholder="sam@reyestransport.com">
+                    </div>
+
+                    <div class="space-y-1.5 sm:col-span-2">
+                        <label for="demo-phone" class="{{ label_cls }}">
+                            Phone <span class="normal-case tracking-normal">(optional)</span>
+                        </label>
+                        <input id="demo-phone" name="phone" type="tel"
+                               autocomplete="tel" inputmode="tel"
+                               class="{{ input_cls }}" placeholder="(555) 019-4827">
+                    </div>
+
+                    <div class="space-y-1.5 sm:col-span-2">
+                        <label for="demo-message" class="{{ label_cls }}">What are you trying to fix?</label>
+                        <textarea id="demo-message" name="message" rows="4" autocomplete="off"
+                                  class="{{ input_cls }} resize-y"
+                                  placeholder="Three trucks, two spreadsheets and a shoebox of fuel receipts."></textarea>
+                    </div>
+
+                    {# Honeypot, here now so the future POST handler has it to reject on.
+                       Hidden from assistive tech and out of the tab order. #}
+                    <div class="hidden" aria-hidden="true">
+                        <label for="demo-hp">Leave this field empty</label>
+                        <input id="demo-hp" name="_hp" type="text" tabindex="-1" autocomplete="off">
+                    </div>
+
+                    <div class="sm:col-span-2 pt-1">
+                        <button id="demo-submit" type="submit"
+                                class="inline-flex items-center gap-2 rounded bg-primary px-5 py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+                            Request a demo {{ icon('arrow-right', 16) }}
+                        </button>
+                    </div>
+
+                    {% if demo_endpoint is null %}
+                        {# No POST handler exists yet. Rather than letting the page
+                           quietly eat a lead, say so plainly and hand over a mailto
+                           that actually carries what they typed. #}
+                        <div id="demo-notice" hidden tabindex="-1" role="status" aria-live="polite"
+                             class="sm:col-span-2 rounded border border-border bg-card p-4 text-sm leading-relaxed">
+                            <p class="font-medium">Nothing was sent.</p>
+                            <p class="mt-1.5 text-muted-foreground">
+                                This form isn't connected yet — our mistake, not yours.
+                                <a id="demo-mailto" href="mailto:{{ contact_email }}"
+                                   class="font-medium text-accent underline underline-offset-2">Send it as an email instead</a>;
+                                everything you typed is already filled in.
+                            </p>
+                        </div>
+
+                        <noscript class="sm:col-span-2">
+                            {# With no JS there is nothing to intercept the submit, so
+                               remove the button outright: a POST to this GET-only route
+                               would be a 405, which looks like the form worked badly
+                               rather than not at all. #}
+                            <style>#demo-submit{display:none}</style>
+                            <p class="rounded border border-border bg-card p-4 text-sm leading-relaxed">
+                                This form needs JavaScript. Email
+                                <a href="mailto:{{ contact_email }}" class="font-medium text-accent underline underline-offset-2">{{ contact_email }}</a>
+                                instead and we will get straight back to you.
+                            </p>
+                        </noscript>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </section>
+</main>
+
+<footer class="border-t border-border py-12">
+    <div class="{{ container }} flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+        <div class="max-w-sm">
+            <div class="flex items-center gap-2.5">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary text-black">
+                    {{ icon('truck', 15) }}
+                </span>
+                <span class="text-sm font-bold uppercase tracking-tight">Fleet Pro</span>
+            </div>
+            <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
+                Dispatch, fleet records, maintenance and cost tracking for small and mid-size
+                trucking companies.
+            </p>
+        </div>
+
+        <nav class="flex flex-col gap-2" aria-label="Footer">
+            {% for href, label in nav_links %}
+                <a href="{{ href }}" class="text-sm text-muted-foreground transition-colors hover:text-foreground">{{ label }}</a>
+            {% endfor %}
+            <a href="#demo" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Request a demo</a>
+            <a href="/login" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Sign in</a>
+        </nav>
+    </div>
+
+    <div class="{{ container }} mt-10 border-t border-border pt-6">
+        <p class="text-xs font-mono text-muted-foreground">&copy; {{ 'now'|date('Y') }} Fleet Pro</p>
+    </div>
+</footer>
+
+{% if demo_endpoint is null %}
+<script>
+    (function () {
+        var form   = document.getElementById('demo-form');
+        var notice = document.getElementById('demo-notice');
+        var link   = document.getElementById('demo-mailto');
+        if (!form || !notice || !link) return;
+
+        var FIELDS = ['name', 'company', 'fleet_size', 'email', 'phone', 'message'];
+
+        form.addEventListener('submit', function (event) {
+            // Native constraint validation has already passed by the time this
+            // fires, so everything required is present.
+            event.preventDefault();
+
+            var data = new FormData(form);
+            var body = FIELDS.map(function (field) {
+                return field.replace(/_/g, ' ') + ': ' + (data.get(field) || '—');
+            }).join('\n');
+
+            link.href = 'mailto:{{ contact_email|e('js') }}'
+                + '?subject=' + encodeURIComponent('Fleet Pro demo request — ' + (data.get('company') || ''))
+                + '&body=' + encodeURIComponent(body);
+
+            notice.hidden = false;
+            notice.focus();
+        });
+    })();
+</script>
+{% endif %}
+
+{# Emitted unconditionally even though it compiles to a near-empty stub. The
+   hot file — not APP_ENV — decides dev vs prod in ViteExtension, and under
+   `npm run dev` the stylesheet is injected by this script rather than by the
+   <link> above, which returns nothing in dev. Dropping it leaves the page
+   completely unstyled while the dev server is running. #}
+{{ vite_entry_script_tags('site') }}
+
+</body>
+</html>

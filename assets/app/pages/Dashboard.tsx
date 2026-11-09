@@ -10,6 +10,7 @@ import {
   type GMap, type GLatLng, type GPoint, type GProjection,
   type GOverlayCtor, type GOverlayInstance, type GoogleNamespace,
 } from "../lib/googleMaps";
+import { can } from "../lib/permissions";
 
 interface GoogleMapsConfig {
   apiKey: string;
@@ -481,7 +482,7 @@ function TruckListAside({ trucks, positions, loading, error, onFocus }: {
 
 // ─── Not-connected placeholder ───────────────────────────────────────────────
 
-function NotConnected({ isOwner }: { isOwner: boolean }) {
+function NotConnected({ canConnect }: { canConnect: boolean }) {
   const navigate = useNavigate();
   return (
     <div className="w-full h-full flex items-center justify-center bg-card border border-border rounded-lg">
@@ -491,11 +492,11 @@ function NotConnected({ isOwner }: { isOwner: boolean }) {
         </div>
         <p className="text-sm font-semibold text-foreground">Google Maps not connected</p>
         <p className="text-xs font-mono text-muted-foreground leading-relaxed">
-          {isOwner
+          {canConnect
             ? "Connect your Google Maps API key in Integrations to see live fleet locations here."
-            : "Ask an owner to connect Google Maps in Integrations to enable this view."}
+            : "Ask an administrator to connect Google Maps in Integrations to enable this view."}
         </p>
-        {isOwner && (
+        {canConnect && (
           <Btn variant="primary" onClick={() => navigate("/integrations")}>
             <Plug size={11} className="inline mr-1.5" />Go to Integrations
           </Btn>
@@ -509,7 +510,8 @@ function NotConnected({ isOwner }: { isOwner: boolean }) {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const isOwner = !!user?.roles?.includes("ROLE_OWNER");
+  // Whether they can actually fix it, rather than which role they hold.
+  const canConnect = can(user, "integrations.manage");
 
   const [status,   setStatus]   = useState<"loading" | "connected" | "not-connected" | "error">("loading");
   const [apiKey,   setApiKey]   = useState<string | null>(null);
@@ -606,7 +608,7 @@ export default function Dashboard() {
               {errorMsg}
             </div>
           )}
-          {status === "not-connected" && <NotConnected isOwner={isOwner} />}
+          {status === "not-connected" && <NotConnected canConnect={canConnect} />}
           {status === "connected" && apiKey && (
             <GoogleMap
               apiKey={apiKey}
