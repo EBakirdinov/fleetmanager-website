@@ -864,8 +864,8 @@ function AddIntervalModal({ serviceTypes, trucks, onClose, onSaved, onError }: {
         truck: truckId ? Number(truckId) : null,
         intervalMiles: intervalMiles ? Number(intervalMiles) : null,
         intervalDays: intervalDays ? Number(intervalDays) : null,
-        lastServiceOn: lastOn || null,
-        lastServiceOdometer: lastOdometer ? Number(lastOdometer) : null,
+        lastServiceOn: truckId && lastOn ? lastOn : null,
+        lastServiceOdometer: truckId && lastOdometer ? Number(lastOdometer) : null,
         alertBeforeMiles: warnMiles ? Number(warnMiles) : null,
         alertBeforeDays: warnDays ? Number(warnDays) : null,
       });
@@ -915,10 +915,21 @@ function AddIntervalModal({ serviceTypes, trucks, onClose, onSaved, onError }: {
           />
         </DrawerFieldRow>
 
-        <DrawerFieldRow cols={2}>
-          <DrawerField label="Last service date" type="date" value={lastOn} onChange={setLastOn} />
-          <DrawerField label="Last service odometer" type="number" value={lastOdometer} onChange={setLastOdometer} mono />
-        </DrawerFieldRow>
+        {/* A fleet-wide row is the policy; the history belongs to each
+            truck. Offering these fields there invites one odometer to be
+            applied to the whole company — the API drops them for the same
+            reason. */}
+        {truckId === "" ? (
+          <p className="text-[11px] text-muted-foreground px-1">
+            A fleet-wide interval sets how often, not when it last happened — each truck
+            counts from its own last completed service of this type.
+          </p>
+        ) : (
+          <DrawerFieldRow cols={2}>
+            <DrawerField label="Last service date" type="date" value={lastOn} onChange={setLastOn} />
+            <DrawerField label="Last service odometer" type="number" value={lastOdometer} onChange={setLastOdometer} mono />
+          </DrawerFieldRow>
+        )}
 
         <DrawerFieldRow cols={2}>
           <DrawerField label="Warn before (miles)" type="number" value={warnMiles} onChange={setWarnMiles} mono />
